@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat ~/.vscode/settings.json 2>/dev/null; ls /Users/madelinepriebe/projects/product-watchlist/.vscode 2>/dev/null || echo \"no .vscode dir in project\")",
+      "Read(//Users/madelinepriebe/.vscode/**)"
+    ]
+  }
+}

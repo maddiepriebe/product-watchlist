@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — ported from the prototype. Do not redesign.
+ * Numerics (prices, deltas, timestamps) are always IBM Plex Mono.
+ * UI/display is Archivo.
+ */
+@theme {
+  --color-ground: #e6e8e3; /* page background */
+  --color-surface: #fafaf7; /* row background */
+  --color-ink: #14171a; /* primary text */
+  --color-ink2: #5c6268; /* secondary */
+  --color-ink3: #8a9096; /* tertiary / labels */
+  --color-rule: #cdd1cb; /* hairlines */
+  --color-low: #1b6b4a; /* good — at/near low */
+  --color-high: #8a3340; /* bad — above typical */
+
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  --radius: 2px;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
