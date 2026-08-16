@@ -11,7 +11,11 @@ Scraping lives in the worker, never in Next.js API routes.
 
 - [x] **Step 1 — Skeleton + auth.** Next.js app, Supabase client/server/proxy
       helpers, magic-link login, protected `(app)` route group, sign-out.
-- [ ] Step 2 — Migrations
+- [x] **Step 2 — Migrations.** `supabase/migrations/` holds the initial schema:
+      the item/source/variant model (a watch groups many URLs, manual linking),
+      RLS, the `my_watchlist` view. Verify with `./scripts/verify-migrations.sh`
+      (needs local Postgres 15+; applies to a throwaway DB and smoke-tests the
+      view math + RLS).
 - [ ] Step 3 — Dashboard
 - [ ] Step 4 — Add-product flow
 - [ ] Step 5 — Worker skeleton
