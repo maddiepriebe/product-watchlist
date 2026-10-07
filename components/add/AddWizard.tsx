@@ -7,6 +7,7 @@ import type { AlertRulesInput } from "@/lib/add/rules";
 import type { Detected, DetectedVariant } from "@/lib/add/types";
 import { AlertStep } from "./AlertStep";
 import { ConfirmStep, type ConfirmChoice } from "./ConfirmStep";
+import { DoneStep } from "./DoneStep";
 import { ManualStep } from "./ManualStep";
 import { PasteStep } from "./PasteStep";
 import { UnsupportedStep } from "./UnsupportedStep";
@@ -29,7 +30,8 @@ type Step =
       retailer: string;
       title: string | null;
     }
-  | { name: "alert"; detected: Detected | null; choice: ConfirmChoice | null };
+  | { name: "alert"; detected: Detected | null; choice: ConfirmChoice | null }
+  | { name: "done"; watchId: string; readable: boolean };
 
 /** Link mode never shows the alert step; the watch keeps its own rules. */
 const DEFAULT_ALERT: AlertRulesInput = {
@@ -60,6 +62,8 @@ function stepLabel(step: Step, total: number): string {
       return `Step 2 of ${total} · Confirm the price`;
     case "alert":
       return `Step 3 of ${total} · Set an alert`;
+    case "done":
+      return "Done";
   }
 }
 
@@ -82,7 +86,7 @@ export function AddWizard({
     setStepState(next);
   }
 
-  /** Save the watch. Success redirects; only a failure comes back here. */
+  /** Save the watch. Success moves to the done step; failure stays put. */
   function save(from: {
     detected: Detected | null;
     choice: ConfirmChoice | null;
@@ -90,7 +94,7 @@ export function AddWizard({
   }) {
     setError(null);
     startTransition(async () => {
-      const failure = await saveAction({
+      const result = await saveAction({
         url,
         priceText,
         mode: from.detected ? "confirmed" : "unsupported",
@@ -99,7 +103,15 @@ export function AddWizard({
         alert: from.alert,
         watchId: link?.watchId ?? null,
       });
-      setError(failure.message);
+      if (result.ok) {
+        go({
+          name: "done",
+          watchId: result.watchId,
+          readable: from.detected !== null,
+        });
+      } else {
+        setError(result.message);
+      }
     });
   }
 
@@ -228,10 +240,22 @@ export function AddWizard({
             error={error}
           />
         )}
+        {step.name === "done" && (
+          <DoneStep
+            watchId={step.watchId}
+            linked={link !== null}
+            readable={step.readable}
+            onLinkAnother={() => {
+              setUrl("");
+              setPriceText(null);
+              go({ name: "paste" });
+            }}
+          />
+        )}
       </div>
 
       <p className="mt-6 flex gap-5 text-sm">
-        {step.name !== "paste" && (
+        {step.name !== "paste" && step.name !== "done" && (
           <button
             type="button"
             disabled={pending}

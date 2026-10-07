@@ -10,7 +10,7 @@ import {
   SAVE_FAILED_MESSAGE,
 } from "@/lib/add/save";
 import { isSaveInput, isUuid } from "@/lib/add/save-input";
-import type { DetectResult, SaveFailure, SaveInput } from "@/lib/add/types";
+import type { DetectResult, SaveInput, SaveResult } from "@/lib/add/types";
 import { createClient } from "@/lib/supabase/server";
 import { extractPrice } from "@/lib/worker";
 
@@ -72,8 +72,8 @@ export async function detectAction(input: {
 const MAX_NICKNAME_LENGTH = 120;
 const BAD_REQUEST = "That request didn't look right. Start again.";
 
-function fail(message: string): SaveFailure {
-  return { message };
+function fail(message: string): SaveResult {
+  return { ok: false, message };
 }
 
 /**
@@ -84,9 +84,9 @@ function fail(message: string): SaveFailure {
  * price text, which the worker re-verifies against the page. No price is
  * written here; the scheduler's first check records the first price point.
  *
- * Returns only on failure. Success redirects to the watchlist.
+ * Success returns the watch id so the wizard can offer to add another site.
  */
-export async function saveAction(raw: SaveInput): Promise<SaveFailure> {
+export async function saveAction(raw: SaveInput): Promise<SaveResult> {
   const { supabase, user } = await requireUser();
 
   if (!isSaveInput(raw)) return fail(BAD_REQUEST);
@@ -188,7 +188,7 @@ export async function saveAction(raw: SaveInput): Promise<SaveFailure> {
           : linkedToExisting.message,
       );
     }
-    redirect("/watchlist");
+    return { ok: true, watchId: raw.watchId };
   }
 
   const watch = await createWatch(supabase, user.id, {
@@ -209,5 +209,5 @@ export async function saveAction(raw: SaveInput): Promise<SaveFailure> {
     return fail(linked.message);
   }
 
-  redirect("/watchlist");
+  return { ok: true, watchId: watch.id };
 }

@@ -54,7 +54,6 @@ export interface SaveInput {
   watchId: string | null;
 }
 
-/** A successful save redirects, so the only result a client ever sees is a failure. */
-export interface SaveFailure {
-  message: string;
-}
+export type SaveResult =
+  | { ok: true; watchId: string }
+  | { ok: false; message: string };

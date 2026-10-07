@@ -62,5 +62,5 @@ export default async function AddPage({
     };
   }
 
-  return <AddWizard link={link} email={user?.email ?? ""} />;
+  return <AddWizard key={link?.watchId ?? "new"} link={link} email={user?.email ?? ""} />;
 }
