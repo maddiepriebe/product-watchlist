@@ -123,8 +123,11 @@ def compose(
         subject = f"{title} is back in stock" + (f" in {label}" if label else "")
         lead = f"{title} is back in stock at {source.retailer} for {price}."
     else:
-        subject = f"{title} dropped to {price}"
-        lead = f"{title} dropped to {price} at {source.retailer}."
+        # "Dropped" only when it did: a first check can already be under the alert.
+        dropped = bool(history) and history[-1].price_cents > latest.price_cents
+        verb = "dropped to" if dropped else "is"
+        subject = f"{title} {verb} {price}"
+        lead = f"{title} {verb} {price} at {source.retailer}."
     why = reason_line(reason, watch, latest, history, variant_key)
     watchlist = f"{app_url}/watchlist"
     footer = "You get this email because you watch this item. Change or mute alerts on your watchlist."

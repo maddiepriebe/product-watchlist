@@ -202,3 +202,16 @@ async def test_dispatch_against_postgres(
     assert sql(db_url, "select reason::text, price_cents, delivered, error from notifications") == [
         ("below_threshold", 24800, True, None)]
     assert sender.sent[0][0] == "a@test.dev"
+
+
+def test_subject_says_dropped_only_after_a_drop() -> None:
+    t0 = datetime(2026, 9, 1, tzinfo=UTC)
+    latest = PricePoint(t0 + timedelta(hours=6), 24800, True)
+    kw = dict(watch=make_watch(), source=make_source(), variant_key="", app_url="https://app.test")
+
+    first = compose("below_threshold", latest=latest, history=[], **kw)
+    assert first.subject == "Rustic Flowers Maxi Dress is $248.00"
+
+    after_drop = compose("below_threshold", latest=latest,
+                         history=[PricePoint(t0, 30000, True)], **kw)
+    assert after_drop.subject == "Rustic Flowers Maxi Dress dropped to $248.00"
