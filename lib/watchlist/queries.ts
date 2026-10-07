@@ -6,6 +6,7 @@ import type {
   WatchRowData,
   WatchlistData,
 } from "./types";
+import { DEFAULT_SORT, type SortKey } from "./sort";
 
 const DAY_MS = 86_400_000;
 const WINDOW_DAYS = 90;
@@ -18,14 +19,16 @@ const PAGE_SIZE = 1000;
  * only), then last_error for any failing sources. Everything goes through
  * the user's RLS session.
  */
-export async function loadWatchlist(): Promise<WatchlistData> {
+export async function loadWatchlist(
+  sort: SortKey = DEFAULT_SORT,
+): Promise<WatchlistData> {
   const supabase = await createClient();
   const nowMs = Date.now();
 
-  const { data, error } = await supabase
-    .from("my_watchlist")
-    .select("*")
-    .order("display_title", { ascending: true, nullsFirst: false });
+  const { data, error } = await orderBy(
+    supabase.from("my_watchlist").select("*"),
+    sort,
+  );
   if (error) throw new Error(`Could not load your watchlist: ${error.message}`);
 
   const rows = (data ?? []).filter(
@@ -38,6 +41,33 @@ export async function loadWatchlist(): Promise<WatchlistData> {
   ]);
 
   return { rows, series, failures, nowMs };
+}
+
+/** Applies the chosen sort in SQL. watch_id is the final stable tiebreak. */
+function orderBy<
+  Q extends {
+    order: (
+      column: string,
+      options: { ascending: boolean; nullsFirst: boolean },
+    ) => Q;
+  },
+>(query: Q, sort: SortKey): Q {
+  const asc = { ascending: true, nullsFirst: false };
+  const desc = { ascending: false, nullsFirst: false };
+  switch (sort) {
+    case "oldest":
+      return query.order("created_at", asc).order("watch_id", asc);
+    case "name":
+      return query.order("display_title", asc).order("watch_id", asc);
+    case "best":
+      // Lowest percentile rank first: today's price is cheapest vs its history.
+      return query
+        .order("pct_rank_90", asc)
+        .order("display_title", asc)
+        .order("watch_id", asc);
+    case "newest":
+      return query.order("created_at", desc).order("watch_id", asc);
+  }
 }
 
 async function loadSeries(
