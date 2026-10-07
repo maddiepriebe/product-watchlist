@@ -132,7 +132,8 @@ async def test_recent_alerts_passed_newest_first(monkeypatch: pytest.MonkeyPatch
     ]
     await dispatch_alerts(db, FakeSender(), app_url="https://app.test", source=make_source(),
                           variant_id=vid, variant_key="M|black", latest=db.state.points[vid][-1])
-    assert [a.reason for a in calls[0].recent_alerts] == ["pct_drop", "new_low"]
+    # Undelivered rows count too: a failed send still holds back the next alert.
+    assert [a.reason for a in calls[0].recent_alerts] == ["below_threshold", "pct_drop", "new_low"]
 
 
 async def test_email_failure_is_recorded_on_every_row_not_raised(monkeypatch: pytest.MonkeyPatch) -> None:

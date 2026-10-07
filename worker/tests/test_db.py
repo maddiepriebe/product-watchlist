@@ -147,7 +147,7 @@ async def test_watches_alerts_notifications_and_email(db_url: str, database: Dat
         recent = await q.recent_alerts(w_m, since=now - timedelta(days=90))
         email = await q.user_email(USER_ID)
 
-    assert [a.reason for a in recent] == ["pct_drop", "new_low"]   # newest first, delivered only
+    assert [a.reason for a in recent] == ["below_threshold", "pct_drop", "new_low"]   # newest first; the undelivered row counts too
     model = next(w for w in watches if w.id == w_m).to_model(recent)
     assert str(model.alert_pct_drop) == "15.00"
     assert model.recent_alerts == recent

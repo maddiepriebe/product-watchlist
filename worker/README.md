@@ -53,6 +53,9 @@ touches a price, and nothing is saved unless it was read exactly.
    for each matching email watch, then logs one `notifications` row per
    reason and sends one email per watch listing every reason. A failed send is
    stored on all of that email's rows and never stops the loop.
+   `evaluate` is given every notification row from the last 90 days, delivered
+   or not, so a failed send still counts toward `min_alert_gap_hrs` and the
+   recovery debounce rather than being retried on the next check.
 
 ## Local development
 

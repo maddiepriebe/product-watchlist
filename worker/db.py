@@ -259,12 +259,17 @@ class Queries:
         return [WatchRow(**r) for r in rows]
 
     async def recent_alerts(self, watch_id: str, since: datetime) -> tuple[SentAlert, ...]:
-        """Delivered alerts, newest first. Failed sends don't count as sent."""
+        """Every notification row since `since`, newest first, delivered or not.
+
+        A send that failed (or crashed before it was marked) still counts: it
+        keeps min_alert_gap_hrs and the recovery debounce running, so a
+        flaky mail provider can't turn into a retry on every check.
+        """
         rows = await self._all(
             """
             select sent_at, reason::text, price_cents
               from notifications
-             where watch_id = %s and delivered and sent_at >= %s
+             where watch_id = %s and sent_at >= %s
              order by sent_at desc
             """,
             (watch_id, since),

@@ -180,6 +180,8 @@ async def dispatch_alerts(
             return 0
         history = await q.history(variant_id, before=latest.observed_at)
         since = latest.observed_at - timedelta(days=90)
+        # Every notification row, delivered or not, so a failed send still
+        # counts toward min_alert_gap_hrs and the recovery debounce.
         recent = {w.id: await q.recent_alerts(w.id, since) for w in watches}
 
     sent = 0
