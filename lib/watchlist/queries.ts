@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { SparkPoint } from "@/components/Sparkline";
 import type {
   FailureByWatch,
+  LinkedSource,
+  SourcesByWatch,
   SeriesByVariant,
   WatchRowData,
   WatchlistData,
@@ -35,12 +37,13 @@ export async function loadWatchlist(
     (row): row is WatchRowData => row.watch_id !== null,
   );
 
-  const [series, failures] = await Promise.all([
+  const [series, failures, sources] = await Promise.all([
     loadSeries(rows, nowMs),
     loadFailures(rows),
+    loadSources(rows),
   ]);
 
-  return { rows, series, failures, nowMs };
+  return { rows, series, failures, sources, nowMs };
 }
 
 /** Applies the chosen sort in SQL. watch_id is the final stable tiebreak. */
@@ -103,6 +106,37 @@ async function loadSeries(
   }
   return series;
 }
+
+/** Every linked site for the visible watches, in one query. */
+async function loadSources(rows: WatchRowData[]): Promise<SourcesByWatch> {
+  const sources: SourcesByWatch = {};
+  if (rows.length === 0) return sources;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("my_watch_sources")
+    .select("*")
+    .in(
+      "watch_id",
+      rows.map((r) => r.watch_id),
+    )
+    .order("added_at", { ascending: true })
+    .order("source_id", { ascending: true });
+  // Rows still render without the list; don't fail the page.
+  if (error) return sources;
+
+  for (const link of data) {
+    if (link.watch_id === null || link.source_id === null) continue;
+    const linked: LinkedSource = {
+      ...link,
+      watch_id: link.watch_id,
+      source_id: link.source_id,
+    };
+    (sources[link.watch_id] ??= []).push(linked);
+  }
+  return sources;
+}
+
 async function loadFailures(rows: WatchRowData[]): Promise<FailureByWatch> {
   const failing = rows
     .filter((r) => r.has_failing_source || r.status === "failing")

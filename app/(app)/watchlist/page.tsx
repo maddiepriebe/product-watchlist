@@ -26,7 +26,7 @@ export default async function WatchlistPage({
   const archivedId = first(params.archived);
   const error = first(params.error);
   const sort = parseSort(first(params.sort));
-  const { rows, series, failures, nowMs } = await loadWatchlist(sort);
+  const { rows, series, failures, sources, nowMs } = await loadWatchlist(sort);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -87,6 +87,7 @@ export default async function WatchlistPage({
               key={row.watch_id}
               row={row}
               points={row.variant_id ? (series[row.variant_id] ?? []) : []}
+              sources={sources[row.watch_id] ?? []}
               nowMs={nowMs}
               lastError={failures[row.watch_id] ?? null}
             />
