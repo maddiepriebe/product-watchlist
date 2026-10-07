@@ -4,6 +4,8 @@
  * browser, so there is nothing for the client to tamper with and send back.
  */
 
+import type { AlertRulesInput } from "./rules";
+
 export interface DetectedVariant {
   variant_key: string;
   size: string | null;
@@ -35,3 +37,20 @@ export type DetectResult =
     }
   /** Transient or unusable input; stay put and let the user try again. */
   | { kind: "retry"; message: string };
+
+export interface SaveInput {
+  url: string;
+  /** The price text that produced the confirmed result; null for plain detection. */
+  priceText: string | null;
+  /** "unsupported" = the user chose "Keep watching anyway". */
+  mode: "confirmed" | "unsupported";
+  /** null = watch every variant. */
+  watchedVariantKeys: string[] | null;
+  nickname: string;
+  alert: AlertRulesInput;
+}
+
+/** A successful save redirects, so the only result a client ever sees is a failure. */
+export interface SaveFailure {
+  message: string;
+}

@@ -2,7 +2,15 @@
 
 import { redirect } from "next/navigation";
 import { toDetectResult } from "@/lib/add/detect";
-import type { DetectResult } from "@/lib/add/types";
+import { parseAlertRules } from "@/lib/add/rules";
+import {
+  createWatch,
+  findOrCreateSource,
+  linkSource,
+  SAVE_FAILED_MESSAGE,
+} from "@/lib/add/save";
+import { isSaveInput } from "@/lib/add/save-input";
+import type { DetectResult, SaveFailure, SaveInput } from "@/lib/add/types";
 import { createClient } from "@/lib/supabase/server";
 import { extractPrice } from "@/lib/worker";
 
@@ -59,4 +67,108 @@ export async function detectAction(input: {
   }
 
   return toDetectResult(await extractPrice({ url, priceText }));
+}
+
+const MAX_NICKNAME_LENGTH = 120;
+const BAD_REQUEST = "That request didn't look right. Start again.";
+
+function fail(message: string): SaveFailure {
+  return { message };
+}
+
+/**
+ * Final step. Nothing the browser sends about the product is trusted: the
+ * worker is asked again, and the source row (url_hash, extractor, config) is
+ * built from that fresh answer. The client contributes only choices the user
+ * is entitled to make: which variants, the nickname, the alert rules, and the
+ * price text, which the worker re-verifies against the page. No price is
+ * written here; the scheduler's first check records the first price point.
+ *
+ * Returns only on failure. Success redirects to the watchlist.
+ */
+export async function saveAction(raw: SaveInput): Promise<SaveFailure> {
+  const { supabase, user } = await requireUser();
+
+  if (!isSaveInput(raw)) return fail(BAD_REQUEST);
+  const url = cleanUrl(raw.url);
+  const priceText = cleanPriceText(raw.priceText);
+  if (!url || priceText === null) return fail(BAD_REQUEST);
+
+  const parsed = parseAlertRules(raw.alert);
+  if (!parsed.ok) return fail("Check the alert amounts and try again.");
+
+  const nickname = raw.nickname.trim();
+  if (nickname.length > MAX_NICKNAME_LENGTH) {
+    return fail("Use a nickname of 120 characters or fewer.");
+  }
+
+  const outcome = await extractPrice({ url, priceText });
+  if (!outcome.reached) return fail(outcome.message);
+  const { status, message, source, variants } = outcome.response;
+
+  let watchedVariantKeys: string[] | null = null;
+  if (raw.mode === "confirmed") {
+    if (status !== "ok" || !source) {
+      return fail(
+        `We couldn't read the price a second time. ${message} Start again to re-check it.`,
+      );
+    }
+    if (raw.watchedVariantKeys !== null) {
+      const known = new Set(variants.map((v) => v.variant_key));
+      const chosen = new Set(raw.watchedVariantKeys);
+      const valid =
+        chosen.size > 0 &&
+        chosen.size === raw.watchedVariantKeys.length &&
+        raw.watchedVariantKeys.every((key) => known.has(key));
+      if (!valid) {
+        return fail(
+          "Those options changed on the page. Start again to pick again.",
+        );
+      }
+      watchedVariantKeys = raw.watchedVariantKeys;
+    }
+  } else {
+    // "Keep watching anyway" is only offered for pages we can't read. If the
+    // worker can read it now, the user should confirm a real price instead.
+    if (status === "ok") {
+      return fail(
+        "We can read this page now. Start again to confirm the price.",
+      );
+    }
+    if (
+      !source ||
+      (status !== "blocked" && status !== "price_text_not_found")
+    ) {
+      return fail(message);
+    }
+  }
+  if (!source) return fail(SAVE_FAILED_MESSAGE);
+
+  const sourceResult = await findOrCreateSource(
+    supabase,
+    user.id,
+    source,
+    raw.mode === "unsupported",
+  );
+  if (!sourceResult.ok) return fail(sourceResult.message);
+
+  const watch = await createWatch(supabase, user.id, {
+    nickname: nickname === "" ? null : nickname,
+    watchedVariantKeys,
+    rules: parsed.rules,
+  });
+  if (!watch.ok) return fail(watch.message);
+
+  const linked = await linkSource(supabase, watch.id, sourceResult.id);
+  if (!linked.ok) {
+    // Don't leave an empty watch behind (the 100-link cap trips here).
+    const { error } = await supabase
+      .from("watches")
+      .delete()
+      .eq("id", watch.id);
+    if (error) console.error("save: cleanup of empty watch failed", error);
+    return fail(linked.message);
+  }
+
+  redirect("/watchlist");
 }

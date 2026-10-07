@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { detectAction } from "@/app/(app)/add/actions";
+import { detectAction, saveAction } from "@/app/(app)/add/actions";
+import type { AlertRulesInput } from "@/lib/add/rules";
 import type { Detected, DetectedVariant } from "@/lib/add/types";
 import { AlertStep } from "./AlertStep";
 import { ConfirmStep, type ConfirmChoice } from "./ConfirmStep";
@@ -69,6 +70,25 @@ export function AddWizard({
   function go(next: Step) {
     setError(null);
     setStepState(next);
+  }
+
+  /** Save the watch. Success redirects; only a failure comes back here. */
+  function save(
+    from: Extract<Step, { name: "alert" }>,
+    alert: AlertRulesInput,
+  ) {
+    setError(null);
+    startTransition(async () => {
+      const failure = await saveAction({
+        url,
+        priceText,
+        mode: from.detected ? "confirmed" : "unsupported",
+        watchedVariantKeys: from.choice?.watchedVariantKeys ?? null,
+        nickname: from.choice?.nickname ?? "",
+        alert,
+      });
+      setError(failure.message);
+    });
   }
 
   /** Run detection, from the paste step or the manual fallback. */
@@ -177,7 +197,7 @@ export function AddWizard({
           <AlertStep
             email={email}
             watched={watchedVariants(step)}
-            onSubmit={() => undefined}
+            onSubmit={(alert) => save(step, alert)}
             pending={pending}
             error={error}
           />
