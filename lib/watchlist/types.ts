@@ -16,6 +16,9 @@ export type SourceStatus = PublicSchema["Enums"]["source_status"];
 /** 90-day price series keyed by variant id, oldest first. */
 export type SeriesByVariant = Record<string, SparkPoint[]>;
 
+/** Last scraper error per watch, for watches with a failing source. */
+export type FailureByWatch = Record<string, string | null>;
+
 /** State returned by the inline alert-rule form action. */
 export type RuleFormState = {
   status: "idle" | "saved" | "error";
@@ -26,6 +29,7 @@ export type RuleFormState = {
 export type WatchlistData = {
   rows: WatchRowData[];
   series: SeriesByVariant;
+  failures: FailureByWatch;
   /** Captured once at load so every row renders against the same "now". */
   nowMs: number;
 };

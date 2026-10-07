@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { WatchRow } from "@/components/WatchRow";
 import { loadWatchlist } from "@/lib/watchlist/queries";
 import { unarchiveWatch } from "./actions";
@@ -21,7 +22,7 @@ export default async function WatchlistPage({
   const params = await searchParams;
   const archivedId = first(params.archived);
   const error = first(params.error);
-  const { rows, series, nowMs } = await loadWatchlist();
+  const { rows, series, failures, nowMs } = await loadWatchlist();
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -55,16 +56,36 @@ export default async function WatchlistPage({
         </form>
       )}
 
-      <div className="mt-6">
-        {rows.map((row) => (
-          <WatchRow
-            key={row.watch_id}
-            row={row}
-            points={row.variant_id ? (series[row.variant_id] ?? []) : []}
-            nowMs={nowMs}
-          />
-        ))}
-      </div>
+      {rows.length === 0 ? (
+        <div
+          className="mt-6 border border-rule bg-surface px-6 py-10"
+          style={{ borderRadius: "var(--radius)" }}
+        >
+          <p className="font-medium text-ink">Nothing on your watchlist yet.</p>
+          <p className="mt-1 text-ink2">
+            Paste a product link to start tracking its price.
+          </p>
+          <Link
+            href="/add"
+            className="mt-5 inline-block bg-ink px-3 py-2 text-sm text-surface"
+            style={{ borderRadius: "var(--radius)" }}
+          >
+            Add a product
+          </Link>
+        </div>
+      ) : (
+        <div className="mt-6">
+          {rows.map((row) => (
+            <WatchRow
+              key={row.watch_id}
+              row={row}
+              points={row.variant_id ? (series[row.variant_id] ?? []) : []}
+              nowMs={nowMs}
+              lastError={failures[row.watch_id] ?? null}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

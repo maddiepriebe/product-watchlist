@@ -6,6 +6,7 @@ import {
 } from "@/app/(app)/watchlist/actions";
 import { PriceLadder } from "@/components/PriceLadder";
 import { Sparkline, type SparkPoint } from "@/components/Sparkline";
+import { StatusNotice } from "@/components/watchlist/StatusNotice";
 import { AlertRuleForm } from "@/components/watchlist/AlertRuleForm";
 import { formatCents, formatCentsPlain, formatRelative } from "@/lib/format";
 import type { WatchRowData } from "@/lib/watchlist/types";
@@ -16,6 +17,8 @@ type WatchRowProps = {
   /** 90-day series for this row's current variant. */
   points: SparkPoint[];
   nowMs: number;
+  /** Last scraper error for a failing source, when known. */
+  lastError?: string | null;
 };
 
 function describeVariant(key: string | null): string | null {
@@ -24,7 +27,12 @@ function describeVariant(key: string | null): string | null {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-export function WatchRow({ row, points, nowMs }: WatchRowProps) {
+export function WatchRow({
+  row,
+  points,
+  nowMs,
+  lastError = null,
+}: WatchRowProps) {
   const title = row.display_title ?? "Untitled product";
   const variant = describeVariant(row.current_variant_key);
   const sourceCount = row.source_count ?? 1;
@@ -54,6 +62,9 @@ export function WatchRow({ row, points, nowMs }: WatchRowProps) {
           <div className="font-mono text-lg text-ink">
             {row.current_cents !== null ? formatCents(row.current_cents) : "—"}
           </div>
+          {row.current_cents !== null && row.in_stock === false && (
+            <div className="text-sm text-ink2">Out of stock</div>
+          )}
           {verdict && (
             <div className={`text-sm ${TONE_TEXT[verdict.tone]}`}>
               {verdict.label}
@@ -87,6 +98,13 @@ export function WatchRow({ row, points, nowMs }: WatchRowProps) {
             strokeWidth="1.25"
           />
         </svg>
+
+        <StatusNotice
+          status={row.status}
+          hasFailingSource={row.has_failing_source === true}
+          lastError={lastError}
+          hasPrice={row.current_cents !== null}
+        />
       </summary>
 
       <div className="grid gap-6 border-t border-rule px-4 py-4 md:grid-cols-2">

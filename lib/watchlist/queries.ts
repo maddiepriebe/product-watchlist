@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { SparkPoint } from "@/components/Sparkline";
 import type {
+  FailureByWatch,
   SeriesByVariant,
   WatchRowData,
   WatchlistData,
@@ -14,8 +15,8 @@ const PAGE_SIZE = 1000;
 /**
  * Loads the dashboard: the `my_watchlist` view (all percentile/median math is
  * in SQL), then the raw 90-day price points for the visible variants (plotting
- * only). Everything goes through the
- * user's RLS session.
+ * only), then last_error for any failing sources. Everything goes through
+ * the user's RLS session.
  */
 export async function loadWatchlist(): Promise<WatchlistData> {
   const supabase = await createClient();
@@ -31,9 +32,12 @@ export async function loadWatchlist(): Promise<WatchlistData> {
     (row): row is WatchRowData => row.watch_id !== null,
   );
 
-  const series = await loadSeries(rows, nowMs);
+  const [series, failures] = await Promise.all([
+    loadSeries(rows, nowMs),
+    loadFailures(rows),
+  ]);
 
-  return { rows, series, nowMs };
+  return { rows, series, failures, nowMs };
 }
 
 async function loadSeries(
@@ -68,4 +72,29 @@ async function loadSeries(
     if (data.length < PAGE_SIZE) break;
   }
   return series;
+}
+async function loadFailures(rows: WatchRowData[]): Promise<FailureByWatch> {
+  const failing = rows
+    .filter((r) => r.has_failing_source || r.status === "failing")
+    .map((r) => r.watch_id);
+  const failures: FailureByWatch = {};
+  if (failing.length === 0) return failures;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("watch_sources")
+    .select("watch_id, product_sources!inner(status, last_error)")
+    .in("watch_id", failing)
+    .eq("product_sources.status", "failing");
+  // The generic message still works without the detail; don't fail the page.
+  if (error) return failures;
+
+  for (const link of data) {
+    const source = link.product_sources;
+    // Keep the first non-empty error per watch.
+    if (failures[link.watch_id] == null) {
+      failures[link.watch_id] = source.last_error;
+    }
+  }
+  return failures;
 }
