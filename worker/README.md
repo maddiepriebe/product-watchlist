@@ -27,7 +27,7 @@ touches a price, and nothing is saved unless it was read exactly.
 | `extract/meta.py` | Title and image for display (JSON-LD name, og:title, og:image). Never prices. |
 | `db.py` | Every SQL query. Claims due sources with `FOR UPDATE SKIP LOCKED` plus a lease, upserts variants, writes price points, counts failures, loads watches and notifications. |
 | `alerts.py` | `evaluate(watch, latest, history)`, which decides which alerts fire. **Owner-implemented stub.** |
-| `notify.py` | After a price point is written, evaluates each email watch on that variant, logs a `notifications` row, then sends the email through Resend. |
+| `notify.py` | After a price point is written, evaluates each email watch on that variant, logs a `notifications` row, then sends one email per watch (all reasons) through Resend. |
 | `scheduler.py` | The loop: claim, fetch, extract, record, alert. Delta logging, failure counting, rescheduling. |
 | `api.py` | FastAPI: `POST /extract` (bearer auth) and `GET /healthz`. |
 | `models.py` | Plain dataclasses shared with `alerts.py`. |
@@ -50,8 +50,9 @@ touches a price, and nothing is saved unless it was read exactly.
 5. While `extract()` is still a stub, a check logs once, writes a note to
    `last_error`, and reschedules without counting a failure.
 6. For each point written, `notify.dispatch_alerts` runs `alerts.evaluate`
-   for each matching email watch, then logs and sends each alert. A failed
-   send is stored on the notification row and never stops the loop.
+   for each matching email watch, then logs one `notifications` row per
+   reason and sends one email per watch listing every reason. A failed send is
+   stored on all of that email's rows and never stops the loop.
 
 ## Local development
 

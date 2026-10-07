@@ -113,27 +113,36 @@ def reason_line(
 
 
 def compose(
-    reason: AlertReason, *, watch: WatchRow, source: SourceRow, variant_key: str,
+    reasons: list[AlertReason], *, watch: WatchRow, source: SourceRow, variant_key: str,
     latest: PricePoint, history: list[PricePoint], app_url: str,
 ) -> Email:
+    """One email for everything that fired on this check, one line per reason.
+
+    The headline follows the price reasons; a restock line rides along. An
+    email that is only about a restock leads with that instead.
+    """
     title = watch.nickname or source.title or f"Your item at {source.retailer}"
     price = money(latest.price_cents, latest.currency)
     label = variant_label(variant_key)
-    if reason == "back_in_stock":
-        subject = f"{title} is back in stock" + (f" in {label}" if label else "")
-        lead = f"{title} is back in stock at {source.retailer} for {price}."
-    else:
+    price_reasons = [r for r in reasons if r != "back_in_stock"]
+    restock = "back_in_stock" in reasons
+    if price_reasons:
         # "Dropped" only when it did: a first check can already be under the alert.
         dropped = bool(history) and history[-1].price_cents > latest.price_cents
         verb = "dropped to" if dropped else "is"
         subject = f"{title} {verb} {price}"
         lead = f"{title} {verb} {price} at {source.retailer}."
-    why = reason_line(reason, watch, latest, history, variant_key)
+    else:
+        subject = f"{title} is back in stock" + (f" in {label}" if label else "")
+        lead = f"{title} is back in stock at {source.retailer} for {price}."
+    lines = [reason_line(r, watch, latest, history, variant_key) for r in price_reasons]
+    if restock:
+        lines.append(reason_line("back_in_stock", watch, latest, history, variant_key))
     watchlist = f"{app_url}/watchlist"
     footer = "You get this email because you watch this item. Change or mute alerts on your watchlist."
 
     text = (
-        f"{lead}\n{why}\n\n"
+        f"{lead}\n" + "\n".join(lines) + "\n\n"
         f"View it on {source.retailer}: {source.canonical_url}\n"
         f"Your watchlist: {watchlist}\n\n"
         f"{footer}\n"
@@ -141,8 +150,8 @@ def compose(
     e = htmllib.escape
     body = (
         f"<p style=\"font-size:16px\"><strong>{e(lead)}</strong></p>"
-        f"<p>{e(why)}</p>"
-        f"<p><a href=\"{e(source.canonical_url)}\">View it on {e(source.retailer)}</a>"
+        + "".join(f"<p style=\"margin:4px 0\">{e(line)}</p>" for line in lines)
+        + f"<p><a href=\"{e(source.canonical_url)}\">View it on {e(source.retailer)}</a>"
         f" &middot; <a href=\"{e(watchlist)}\">Your watchlist</a></p>"
         f"<p style=\"color:#666;font-size:12px\">{e(footer)}</p>"
     )
@@ -159,7 +168,12 @@ async def dispatch_alerts(
     db: Database, sender: EmailSender, *, app_url: str,
     source: SourceRow, variant_id: str, variant_key: str, latest: PricePoint,
 ) -> int:
-    """Evaluate every email watch on this variant and send what fires. Returns emails sent."""
+    """Evaluate every email watch on this variant and send what fires.
+
+    A watch gets one email per check however many reasons fired, but one
+    `notifications` row per reason (evaluate's debounce is per reason).
+    Returns emails sent.
+    """
     async with db.transaction() as q:
         watches = [w for w in await q.watches_for_variant(source.id, variant_key) if w.channel == "email"]
         if not watches:
@@ -200,24 +214,28 @@ async def _send(
         log.warning("watch %s: owner has no email address; skipping %s", watch.id, reasons)
         return 0
 
-    sent = 0
-    for reason in reasons:
-        # Log first, then send: if we crash mid-send, the row (delivered =
-        # false) records the attempt instead of the alert vanishing.
-        async with db.transaction() as q:
-            nid = await q.insert_notification(
+    # Log first, then send: if we crash mid-send, the rows (delivered = false)
+    # record the attempt instead of the alert vanishing.
+    now = datetime.now(UTC)
+    async with db.transaction() as q:
+        ids = [
+            await q.insert_notification(
                 watch_id=watch.id, source_id=source.id, variant_id=variant_id,
-                reason=reason, price_cents=latest.price_cents, sent_at=datetime.now(UTC),
+                reason=reason, price_cents=latest.price_cents, sent_at=now,
             )
-        email = compose(reason, watch=watch, source=source, variant_key=variant_key,
-                        latest=latest, history=history, app_url=app_url)
-        error: str | None = None
-        try:
-            await sender.send(to=to, email=email, idempotency_key=f"notification-{nid}")
-        except Exception as e:
-            error = f"{type(e).__name__}: {e}"[:500]
-            log.warning("email for notification %s failed: %s", nid, error)
-        async with db.transaction() as q:
+            for reason in reasons
+        ]
+    email = compose(reasons, watch=watch, source=source, variant_key=variant_key,
+                    latest=latest, history=history, app_url=app_url)
+    error: str | None = None
+    try:
+        # Named after the rows this email covers.
+        await sender.send(to=to, email=email,
+                          idempotency_key="notifications-" + "-".join(str(i) for i in sorted(ids)))
+    except Exception as e:
+        error = f"{type(e).__name__}: {e}"[:500]
+        log.warning("email for notifications %s failed: %s", ids, error)
+    async with db.transaction() as q:
+        for nid in ids:
             await q.mark_notification(nid, delivered=error is None, error=error)
-        sent += error is None
-    return sent
+    return int(error is None)
