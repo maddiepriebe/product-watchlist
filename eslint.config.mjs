@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Agent worktrees and the Python worker are not part of the Next.js app.
+    ".claude/**",
+    "worker/**",
   ]),
 ]);
 
