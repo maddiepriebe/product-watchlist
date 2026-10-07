@@ -318,6 +318,49 @@ export type Database = {
       }
     }
     Views: {
+      my_watch_sources: {
+        Row: {
+          added_at: string | null
+          canonical_url: string | null
+          current_cents: number | null
+          current_variant_key: string | null
+          in_stock: boolean | null
+          is_cheapest: boolean | null
+          last_checked_at: string | null
+          last_error: string | null
+          retailer: string | null
+          source_id: string | null
+          status: Database["public"]["Enums"]["source_status"] | null
+          title: string | null
+          watch_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "watch_sources_source_id_fkey"
+            columns: ["source_id"]
+            referencedRelation: "my_watchlist"
+            referencedColumns: ["source_id"]
+          },
+          {
+            foreignKeyName: "watch_sources_source_id_fkey"
+            columns: ["source_id"]
+            referencedRelation: "product_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "watch_sources_watch_id_fkey"
+            columns: ["watch_id"]
+            referencedRelation: "my_watchlist"
+            referencedColumns: ["watch_id"]
+          },
+          {
+            foreignKeyName: "watch_sources_watch_id_fkey"
+            columns: ["watch_id"]
+            referencedRelation: "watches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       my_watchlist: {
         Row: {
           alert_below_cents: number | null
@@ -327,6 +370,7 @@ export type Database = {
           canonical_url: string | null
           channel: Database["public"]["Enums"]["notify_channel"] | null
           consecutive_failures: number | null
+          created_at: string | null
           current_cents: number | null
           current_observed_at: string | null
           current_variant_key: string | null
