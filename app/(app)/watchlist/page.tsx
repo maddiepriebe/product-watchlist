@@ -1,11 +1,22 @@
-export default function WatchlistPage() {
+import { WatchRow } from "@/components/WatchRow";
+import { loadWatchlist } from "@/lib/watchlist/queries";
+
+export default async function WatchlistPage() {
+  const { rows, series, nowMs } = await loadWatchlist();
+
   return (
-    <div className="max-w-2xl">
-      <h1 className="text-xl font-medium text-ink">You&apos;re signed in</h1>
-      <p className="mt-2 text-ink2">
-        This is the protected watchlist route. The dashboard — rows, price
-        ladders, and alert rules — arrives in step 3.
-      </p>
+    <div className="mx-auto max-w-5xl">
+      <h1 className="text-xl font-medium text-ink">Watchlist</h1>
+      <div className="mt-6">
+        {rows.map((row) => (
+          <WatchRow
+            key={row.watch_id}
+            row={row}
+            points={row.variant_id ? (series[row.variant_id] ?? []) : []}
+            nowMs={nowMs}
+          />
+        ))}
+      </div>
     </div>
   );
 }
