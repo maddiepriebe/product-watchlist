@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { muteWatch, unmuteWatch } from "@/app/(app)/watchlist/actions";
 import { PriceLadder } from "@/components/PriceLadder";
 import { Sparkline, type SparkPoint } from "@/components/Sparkline";
-import { formatCents, formatRelative } from "@/lib/format";
+import { AlertRuleForm } from "@/components/watchlist/AlertRuleForm";
+import { formatCents, formatCentsPlain, formatRelative } from "@/lib/format";
 import type { WatchRowData } from "@/lib/watchlist/types";
 import { TONE_TEXT, verdictFor } from "@/lib/watchlist/verdict";
 
@@ -18,20 +20,6 @@ function describeVariant(key: string | null): string | null {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-/** Plain-language summary of the alert rule, one clause per active rule. */
-function ruleSummary(row: WatchRowData): string[] {
-  const clauses: string[] = [];
-  if (row.alert_below_cents !== null) {
-    clauses.push(`Price at or below ${formatCents(row.alert_below_cents)}`);
-  }
-  if (row.alert_pct_drop !== null) {
-    clauses.push(`Drops ${row.alert_pct_drop}% below the 30-day median`);
-  }
-  if (row.alert_on_new_low) clauses.push("New 90-day low");
-  if (row.alert_on_restock) clauses.push("Back in stock");
-  return clauses;
-}
-
 export function WatchRow({ row, points, nowMs }: WatchRowProps) {
   const title = row.display_title ?? "Untitled product";
   const variant = describeVariant(row.current_variant_key);
@@ -41,7 +29,8 @@ export function WatchRow({ row, points, nowMs }: WatchRowProps) {
     lowCents: row.low_90_cents,
     pctRank: row.pct_rank_90,
   });
-  const rules = ruleSummary(row);
+  const mutedUntilMs = row.muted_until ? Date.parse(row.muted_until) : NaN;
+  const muted = !Number.isNaN(mutedUntilMs) && mutedUntilMs > nowMs;
 
   return (
     <details className="group border-b border-rule bg-surface first:border-t">
@@ -124,15 +113,39 @@ export function WatchRow({ row, points, nowMs }: WatchRowProps) {
 
         <div>
           <h3 className="text-sm text-ink3">Alert rule</h3>
-          {rules.length > 0 ? (
-            <ul className="mt-2 space-y-1 text-sm text-ink">
-              {rules.map((clause) => (
-                <li key={clause}>{clause}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-sm text-ink2">No alerts set.</p>
-          )}
+          <div className="mt-2">
+            <AlertRuleForm
+              watchId={row.watch_id}
+              belowDefault={
+                row.alert_below_cents !== null
+                  ? formatCentsPlain(row.alert_below_cents)
+                  : ""
+              }
+              pctDefault={
+                row.alert_pct_drop !== null ? String(row.alert_pct_drop) : ""
+              }
+              onNewLow={row.alert_on_new_low === true}
+              onRestock={row.alert_on_restock === true}
+            />
+          </div>
+          <form
+            action={muted ? unmuteWatch : muteWatch}
+            className="mt-4 flex flex-wrap items-center gap-3 border-t border-rule pt-4 text-sm"
+          >
+            <input type="hidden" name="watch_id" value={row.watch_id} />
+            <button
+              type="submit"
+              className="text-ink2 underline underline-offset-4 hover:text-ink"
+            >
+              {muted ? "Unmute" : "Mute for 7 days"}
+            </button>
+            {muted && row.muted_until && (
+              <span className="text-ink3">
+                Alerts muted until{" "}
+                <span className="font-mono">{row.muted_until.slice(0, 10)}</span>
+              </span>
+            )}
+          </form>
         </div>
       </div>
     </details>

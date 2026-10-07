@@ -16,6 +16,13 @@ export type SourceStatus = PublicSchema["Enums"]["source_status"];
 /** 90-day price series keyed by variant id, oldest first. */
 export type SeriesByVariant = Record<string, SparkPoint[]>;
 
+/** State returned by the inline alert-rule form action. */
+export type RuleFormState = {
+  status: "idle" | "saved" | "error";
+  message?: string;
+  fieldErrors?: { below?: string; pct?: string };
+};
+
 export type WatchlistData = {
   rows: WatchRowData[];
   series: SeriesByVariant;
