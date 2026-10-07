@@ -1,0 +1,24 @@
+[project]
+name = "watchlist-worker"
+version = "0.1.0"
+description = "Fetches product pages, extracts prices, records price points, sends alerts."
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.27",
+  "selectolax>=0.3.21",
+  "psycopg[binary]>=3.2",
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "resend>=2.4",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
