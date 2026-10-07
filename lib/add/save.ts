@@ -13,7 +13,7 @@ type Failure = { ok: false; message: string };
 export const SAVE_FAILED_MESSAGE =
   "We couldn't save that. Try again in a minute.";
 export const CAP_MESSAGE =
-  "You've reached 100 linked links. Archive a watch or remove a link to add more.";
+  "You're at the limit of 100 linked product links. Archive a watch or remove a link to add more.";
 
 const UNIQUE_VIOLATION = "23505";
 
