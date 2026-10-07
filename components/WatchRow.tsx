@@ -39,6 +39,7 @@ export function WatchRow({
   const verdict = verdictFor({
     currentCents: row.current_cents,
     lowCents: row.low_90_cents,
+    highCents: row.high_90_cents,
     pctRank: row.pct_rank_90,
   });
   const mutedUntilMs = row.muted_until ? Date.parse(row.muted_until) : NaN;

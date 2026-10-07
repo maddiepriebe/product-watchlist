@@ -14,7 +14,7 @@ export const HIGH_MIN_RANK = 72;
 
 export type Tone = "low" | "mid" | "high";
 
-export type VerdictKey = "at-low" | "cheap" | "mid" | "above";
+export type VerdictKey = "flat" | "at-low" | "cheap" | "mid" | "above";
 
 export type Verdict = {
   key: VerdictKey;
@@ -25,6 +25,7 @@ export type Verdict = {
 export type VerdictInput = {
   currentCents: number | null;
   lowCents: number | null;
+  highCents: number | null;
   pctRank: number | null;
 };
 
@@ -56,9 +57,15 @@ export function toneForRank(pctRank: number | null): Tone {
 export function verdictFor({
   currentCents,
   lowCents,
+  highCents,
   pctRank,
 }: VerdictInput): Verdict | null {
   if (currentCents === null) return null;
+
+  // The price hasn't moved in the window, so "low" would be meaningless.
+  if (lowCents !== null && highCents !== null && lowCents === highCents) {
+    return { key: "flat", label: "Price hasn't changed", tone: "mid" };
+  }
 
   if (lowCents !== null && currentCents <= lowCents) {
     return { key: "at-low", label: "At its 90-day low", tone: "low" };
