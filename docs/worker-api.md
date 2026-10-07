@@ -43,14 +43,15 @@ Response `200` (every outcome that isn't an auth/body error):
   },
   "variants": [                // non-empty only when status = "ok"
     {
-      "variant_key": "M|black", // "" for single-variant products
-      "size": "M",              // or null
+      "variant_key": "m|black", // lowercase "size|color"; "" for single-variant products
+      "size": "m",              // or null
       "color": "black",         // or null
       "price_cents": 29800,
       "currency": "USD",
       "in_stock": true
     }
-  ]
+  ],
+  "url_variant_key": "m|black" // or null — the variant the pasted URL points at
 }
 ```
 
@@ -64,6 +65,21 @@ Response `200` (every outcome that isn't an auth/body error):
 | `invalid_url`           | Not an http(s) URL.                                        | Show message.                    |
 | `price_text_unparseable`| `price_text` isn't a price we can parse exactly.           | Ask again.                       |
 | `price_text_not_found`  | `price_text` parsed, but no JSON value on the page equals it. | Offer "keep watching anyway" (saved as `unsupported`). |
+
+### `url_variant_key`
+
+Product URLs often pin one variant (`?variant=…`, `?sku=…`, `?objectId=…`,
+`?color=…&size=…`). When the page's structured data names exactly one offer
+that matches those params, `url_variant_key` is that variant's normalized key,
+and the app should pre-select it and save `watches.watched_variant_keys =
+[url_variant_key]` so alerts only fire for it. It is `null` when the URL
+doesn't pin a variant, when zero or several offers match, when the matched
+offer states no size or color (nothing to key by), or when the key isn't one
+this response can be watched by (it must equal a `variants[].variant_key`).
+Never guess: `null` means "watch every variant".
+
+Keys are always lowercase `"<size>|<color>"` (one `|`, each side trimmed and
+single-spaced), or `""` for none.
 
 `401` — missing/wrong bearer token. `422` — malformed body.
 
@@ -84,6 +100,21 @@ it. A match becomes the source's learned extractor:
   "unit": "major"                 // "major" (298.00) or "minor" (29800)
 }
 ```
+
+If the pasted URL pins an offer (see `url_variant_key`), the search prefers
+paths inside that offer instead of taking the first match, and when the learned
+path lies inside it the config also stores the variant:
+
+```jsonc
+  "variant_key": "xs|black",      // optional; the scheduler records prices under it
+  "size": "XS",                   // optional, as the page states it
+  "color": "Black"                // optional
+```
+
+Configs without `variant_key` (any taught before this existed, or from a URL
+that pins nothing) read as a single variant with key `""`. In that case
+`url_variant_key` is `null`; it is only set when the stored path is inside the
+pinned offer, so watching the key can really fire.
 
 The scheduler uses `extractor_config.path` when `learned` is true and the
 registry `extract()` otherwise. Nothing is saved from the user's text alone.

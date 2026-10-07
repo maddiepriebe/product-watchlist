@@ -21,7 +21,9 @@ touches a price, and nothing is saved unless it was read exactly.
 | `extract/base.py` | `extract(html, url)`, the per-retailer extractor registry. **Owner-implemented stub.** |
 | `extract/normalize.py` | `normalize_url(url)`, which returns the canonical URL and hash. **Owner-implemented stub.** |
 | `extract/findpath.py` | The "teach the extractor" search. `parse_price_text` turns "$1,298.50" into 129850 and rejects anything ambiguous; `find_paths` finds JSON-LD / `__NEXT_DATA__` paths whose value equals that price. Only price-named keys can match, so a size is never picked. |
-| `extract/learned.py` | Reads a price through a learned `extractor_config`. Returns `[]` when the path no longer leads to an exact number. |
+| `extract/learned.py` | Reads a price through a learned `extractor_config`. Returns `[]` when the path no longer leads to an exact number. Reports the config's `variant_key` if it has one. |
+| `extract/urlvariant.py` | Finds the one offer a pasted URL's `variant` / `sku` / `objectId` / `color` / `size` params point at (JSON-LD offers, Vuori's `pdpPageProps.variants`), or None if zero or several match. |
+| `extract/variantkey.py` | `variant_key(size, color)`, the single builder of lowercase `size\|color` keys. |
 | `extract/meta.py` | Title and image for display (JSON-LD name, og:title, og:image). Never prices. |
 | `db.py` | Every SQL query. Claims due sources with `FOR UPDATE SKIP LOCKED` plus a lease, upserts variants, writes price points, counts failures, loads watches and notifications. |
 | `alerts.py` | `evaluate(watch, latest, history)`, which decides which alerts fire. **Owner-implemented stub.** |

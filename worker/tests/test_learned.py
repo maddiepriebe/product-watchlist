@@ -136,3 +136,23 @@ def test_currency_from_sibling() -> None:
 )
 def test_availability(value: object, expected: bool | None) -> None:
     assert availability_in_stock(value) is expected
+
+def test_config_variant_key_is_reported() -> None:
+    html = fixture(VUORI)
+    cfg = {
+        "learned": True, "blob": "jsonld", "block": 0,
+        "path": ["hasVariant", 1, "offers", "price"], "unit": "major",
+        "variant_key": "xs|black", "size": "XS", "color": "Black",
+    }
+    [got] = resolve(html, json.loads(json.dumps(cfg)))
+    assert got.variant_key == "xs|black"
+    assert got.price_cents == 6400
+    # Same path without a key (every config taught before pinning): no key.
+    del cfg["variant_key"]
+    assert resolve(html, cfg)[0].variant_key is None
+
+
+@pytest.mark.parametrize("bad", ["", "XS|Black", "xs", " xs|black", 5, None, ["xs|black"]])
+def test_malformed_variant_key_in_config_is_ignored(bad: object) -> None:
+    cfg = find_paths(fixture(FARMRIO), 29800)[0].config()
+    assert resolve(fixture(FARMRIO), {**cfg, "variant_key": bad})[0].variant_key is None
