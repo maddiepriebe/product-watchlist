@@ -24,7 +24,7 @@ export default async function AddPage({
     const { data } = watchId
       ? await supabase
           .from("my_watchlist")
-          .select("display_title")
+          .select("display_title, watched_variant_keys")
           .eq("watch_id", watchId)
           .maybeSingle()
       : { data: null };
@@ -55,7 +55,11 @@ export default async function AddPage({
         </div>
       );
     }
-    link = { watchId, title: data.display_title ?? "this watch" };
+    link = {
+      watchId,
+      title: data.display_title ?? "this watch",
+      watchedVariantKeys: data.watched_variant_keys,
+    };
   }
 
   return <AddWizard link={link} email={user?.email ?? ""} />;

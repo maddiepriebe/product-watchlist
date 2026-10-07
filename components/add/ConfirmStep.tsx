@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import type { Detected, DetectedVariant } from "@/lib/add/types";
+import { formatVariantKey } from "@/lib/add/variant";
 import {
   inputClass,
   labelClass,
@@ -24,6 +25,7 @@ export function ConfirmStep({
   detected,
   pickVariants,
   askNickname,
+  linkedFilter,
   onConfirm,
   onReject,
   pending,
@@ -33,13 +35,22 @@ export function ConfirmStep({
   /** Show the variant picker (new watches with more than one variant). */
   pickVariants: boolean;
   askNickname: boolean;
+  /** Link mode: the watch's existing variant filter, if it has one. */
+  linkedFilter: string[] | null;
   onConfirm: (choice: ConfirmChoice) => void;
   onReject: () => void;
   pending: boolean;
   error: string | null;
 }) {
   const { variants } = detected;
-  const showPicker = pickVariants && variants.length > 1;
+  const pinnedKey =
+    pickVariants && variants.length > 1 ? detected.url_variant_key : null;
+  const [onlyPinned, setOnlyPinned] = useState(true);
+  const pinned = pinnedKey !== null && onlyPinned;
+  const showPicker = pickVariants && variants.length > 1 && !pinned;
+  const filterMismatch =
+    linkedFilter !== null &&
+    !variants.some((v) => linkedFilter.includes(v.variant_key));
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(variants.map((v) => v.variant_key)),
   );
@@ -57,6 +68,10 @@ export function ConfirmStep({
   const nothingSelected = showPicker && selected.size === 0;
 
   function confirm() {
+    if (pinnedKey !== null && pinned) {
+      onConfirm({ watchedVariantKeys: [pinnedKey], nickname: nickname.trim() });
+      return;
+    }
     const all = !showPicker || selected.size === variants.length;
     onConfirm({
       watchedVariantKeys: all
@@ -133,6 +148,32 @@ export function ConfirmStep({
           </p>
         )}
       </fieldset>
+
+      {pinnedKey !== null && (
+        <label className="flex items-start gap-3 text-ink">
+          <input
+            type="checkbox"
+            checked={onlyPinned}
+            onChange={(event) => setOnlyPinned(event.target.checked)}
+            className="mt-1 h-4 w-4 accent-ink"
+          />
+          <span>
+            Only alert me about this one:{" "}
+            <span className="font-medium">{formatVariantKey(pinnedKey)}</span>
+            {!onlyPinned && (
+              <span className="block text-sm text-ink3">
+                Choose which options to watch above.
+              </span>
+            )}
+          </span>
+        </label>
+      )}
+
+      {filterMismatch && (
+        <p className="text-sm text-ink2">
+          This site lists sizes differently, so we&apos;ll watch all its sizes.
+        </p>
+      )}
 
       {askNickname && (
         <div className="flex flex-col gap-2">

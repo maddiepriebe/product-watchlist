@@ -21,6 +21,8 @@ export interface Detected {
   retailer: string;
   image_url: string | null;
   variants: DetectedVariant[];
+  /** The variant the pasted URL points at (one of `variants`), or null. */
+  url_variant_key: string | null;
 }
 
 export type DetectResult =

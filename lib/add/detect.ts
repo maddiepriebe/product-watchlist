@@ -1,4 +1,4 @@
-import type { ExtractOutcome } from "@/lib/worker";
+import { resolveUrlVariantKey, type ExtractOutcome } from "@/lib/worker";
 import type { DetectResult } from "./types";
 
 /**
@@ -20,6 +20,7 @@ export function toDetectResult(outcome: ExtractOutcome): DetectResult {
           retailer: source.retailer,
           image_url: source.image_url,
           variants,
+          url_variant_key: resolveUrlVariantKey(outcome.response),
         },
       };
     case "no_price":

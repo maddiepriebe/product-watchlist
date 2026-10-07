@@ -15,6 +15,8 @@ import { UnsupportedStep } from "./UnsupportedStep";
 export interface LinkTarget {
   watchId: string;
   title: string;
+  /** The watch's variant filter; null = it follows every variant. */
+  watchedVariantKeys: string[] | null;
 }
 
 type Step =
@@ -169,6 +171,7 @@ export function AddWizard({
             detected={step.detected}
             pickVariants={!link}
             askNickname={!link}
+            linkedFilter={link?.watchedVariantKeys ?? null}
             onConfirm={(choice) =>
               link
                 ? // Rules live on the watch, so linking skips the alert step.
