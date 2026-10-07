@@ -10,6 +10,7 @@ pytest's pythonpath is the worker root).
 from __future__ import annotations
 
 import dataclasses
+import functools
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -30,6 +31,7 @@ def fixture_path(prefix: str) -> Path:
     return matches[0]
 
 
+@functools.cache
 def read_fixture(prefix: str) -> str:
     return fixture_path(prefix).read_text(encoding="utf-8", errors="replace")
 
