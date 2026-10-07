@@ -50,6 +50,12 @@ export interface ExtractResponse {
   message: string;
   source: WorkerSource | null;
   variants: WorkerVariant[];
+  /**
+   * Normalized "size|color" key of the variant the pasted URL points at, or
+   * null. Optional on the wire (older workers omit it); `extractPrice`
+   * resolves it with `resolveUrlVariantKey`, so callers can rely on it.
+   */
+  url_variant_key?: string | null;
 }
 
 /** Either the worker answered (any `status`), or we never got a usable answer. */
@@ -159,12 +165,30 @@ export function isExtractResponse(v: unknown): v is ExtractResponse {
   if (!Array.isArray(v.variants) || !v.variants.every(isWorkerVariant)) {
     return false;
   }
+  if (
+    v.url_variant_key !== undefined &&
+    !isNullableString(v.url_variant_key)
+  ) {
+    return false;
+  }
   if (v.status === "ok") {
     if (v.source === null || v.variants.length === 0) return false;
     const keys = new Set(v.variants.map((x: WorkerVariant) => x.variant_key));
     if (keys.size !== v.variants.length) return false;
   }
   return true;
+}
+
+/**
+ * The pinned variant key, or null when absent or when it names no returned
+ * variant (a stale or wrong key must never narrow a watch to nothing).
+ */
+export function resolveUrlVariantKey(
+  r: Pick<ExtractResponse, "variants" | "url_variant_key">,
+): string | null {
+  const key = r.url_variant_key;
+  if (typeof key !== "string") return null;
+  return r.variants.some((v) => v.variant_key === key) ? key : null;
 }
 
 /**
@@ -223,5 +247,8 @@ export async function extractPrice(args: {
       message: "The price checker sent an answer we couldn't read. Try again in a minute.",
     };
   }
-  return { reached: true, response: json };
+  return {
+    reached: true,
+    response: { ...json, url_variant_key: resolveUrlVariantKey(json) },
+  };
 }
