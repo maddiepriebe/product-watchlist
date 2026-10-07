@@ -18,7 +18,10 @@ Scraping lives in the worker, never in Next.js API routes.
       view math + RLS).
 - [ ] Step 3 — Dashboard
 - [ ] Step 4 — Add-product flow
-- [ ] Step 5 — Worker skeleton
+- [x] **Step 5 — Worker skeleton.** `worker/`: polite fetcher, polling
+      scheduler, `POST /extract` API, alert emails, and Fly.io deploy config.
+      `normalize_url`, `extract` and `evaluate` are still owner stubs. See
+      [`worker/README.md`](worker/README.md).
 
 ## Local setup
 
