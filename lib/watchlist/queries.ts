@@ -2,10 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import type { SparkPoint } from "@/components/Sparkline";
 import type {
   FailureByWatch,
+  LinkedSource,
+  SourcesByWatch,
   SeriesByVariant,
   WatchRowData,
   WatchlistData,
 } from "./types";
+import { DEFAULT_SORT, type SortKey } from "./sort";
 
 const DAY_MS = 86_400_000;
 const WINDOW_DAYS = 90;
@@ -18,26 +21,56 @@ const PAGE_SIZE = 1000;
  * only), then last_error for any failing sources. Everything goes through
  * the user's RLS session.
  */
-export async function loadWatchlist(): Promise<WatchlistData> {
+export async function loadWatchlist(
+  sort: SortKey = DEFAULT_SORT,
+): Promise<WatchlistData> {
   const supabase = await createClient();
   const nowMs = Date.now();
 
-  const { data, error } = await supabase
-    .from("my_watchlist")
-    .select("*")
-    .order("display_title", { ascending: true, nullsFirst: false });
+  const { data, error } = await orderBy(
+    supabase.from("my_watchlist").select("*"),
+    sort,
+  );
   if (error) throw new Error(`Could not load your watchlist: ${error.message}`);
 
   const rows = (data ?? []).filter(
     (row): row is WatchRowData => row.watch_id !== null,
   );
 
-  const [series, failures] = await Promise.all([
+  const [series, failures, sources] = await Promise.all([
     loadSeries(rows, nowMs),
     loadFailures(rows),
+    loadSources(rows),
   ]);
 
-  return { rows, series, failures, nowMs };
+  return { rows, series, failures, sources, nowMs };
+}
+
+/** Applies the chosen sort in SQL. watch_id is the final stable tiebreak. */
+function orderBy<
+  Q extends {
+    order: (
+      column: string,
+      options: { ascending: boolean; nullsFirst: boolean },
+    ) => Q;
+  },
+>(query: Q, sort: SortKey): Q {
+  const asc = { ascending: true, nullsFirst: false };
+  const desc = { ascending: false, nullsFirst: false };
+  switch (sort) {
+    case "oldest":
+      return query.order("created_at", asc).order("watch_id", asc);
+    case "name":
+      return query.order("display_title", asc).order("watch_id", asc);
+    case "best":
+      // Lowest percentile rank first: today's price is cheapest vs its history.
+      return query
+        .order("pct_rank_90", asc)
+        .order("display_title", asc)
+        .order("watch_id", asc);
+    case "newest":
+      return query.order("created_at", desc).order("watch_id", asc);
+  }
 }
 
 async function loadSeries(
@@ -73,6 +106,37 @@ async function loadSeries(
   }
   return series;
 }
+
+/** Every linked site for the visible watches, in one query. */
+async function loadSources(rows: WatchRowData[]): Promise<SourcesByWatch> {
+  const sources: SourcesByWatch = {};
+  if (rows.length === 0) return sources;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("my_watch_sources")
+    .select("*")
+    .in(
+      "watch_id",
+      rows.map((r) => r.watch_id),
+    )
+    .order("added_at", { ascending: true })
+    .order("source_id", { ascending: true });
+  // Rows still render without the list; don't fail the page.
+  if (error) return sources;
+
+  for (const link of data) {
+    if (link.watch_id === null || link.source_id === null) continue;
+    const linked: LinkedSource = {
+      ...link,
+      watch_id: link.watch_id,
+      source_id: link.source_id,
+    };
+    (sources[link.watch_id] ??= []).push(linked);
+  }
+  return sources;
+}
+
 async function loadFailures(rows: WatchRowData[]): Promise<FailureByWatch> {
   const failing = rows
     .filter((r) => r.has_failing_source || r.status === "failing")

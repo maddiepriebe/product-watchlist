@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { WatchRow } from "@/components/WatchRow";
+import { SortControl } from "@/components/watchlist/SortControl";
 import { loadWatchlist } from "@/lib/watchlist/queries";
+import { parseSort } from "@/lib/watchlist/sort";
 import { unarchiveWatch } from "./actions";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -8,6 +10,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type SearchParams = Promise<{
   archived?: string | string[];
   error?: string | string[];
+  sort?: string | string[];
 }>;
 
 function first(value: string | string[] | undefined): string | undefined {
@@ -22,11 +25,15 @@ export default async function WatchlistPage({
   const params = await searchParams;
   const archivedId = first(params.archived);
   const error = first(params.error);
-  const { rows, series, failures, nowMs } = await loadWatchlist();
+  const sort = parseSort(first(params.sort));
+  const { rows, series, failures, sources, nowMs } = await loadWatchlist(sort);
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="text-xl font-medium text-ink">Watchlist</h1>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <h1 className="text-xl font-medium text-ink">Watchlist</h1>
+        {rows.length > 1 && <SortControl current={sort} />}
+      </div>
 
       {error && (
         <p
@@ -80,6 +87,7 @@ export default async function WatchlistPage({
               key={row.watch_id}
               row={row}
               points={row.variant_id ? (series[row.variant_id] ?? []) : []}
+              sources={sources[row.watch_id] ?? []}
               nowMs={nowMs}
               lastError={failures[row.watch_id] ?? null}
             />

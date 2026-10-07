@@ -63,7 +63,8 @@ export function PriceLadder({
     medianCents === null || flat
       ? null
       : position(medianCents, lowCents, highCents);
-  const tone = toneForRank(pctRank);
+  // A flat series has no meaningful rank, so the dot stays neutral.
+  const tone = flat ? "mid" : toneForRank(pctRank);
 
   const parts: string[] = [];
   if (currentCents !== null) parts.push(`Today ${formatCents(currentCents)}`);

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   archiveWatch,
   muteWatch,
@@ -7,15 +6,18 @@ import {
 import { PriceLadder } from "@/components/PriceLadder";
 import { Sparkline, type SparkPoint } from "@/components/Sparkline";
 import { StatusNotice } from "@/components/watchlist/StatusNotice";
+import { LinkedSites } from "@/components/watchlist/LinkedSites";
 import { AlertRuleForm } from "@/components/watchlist/AlertRuleForm";
 import { formatCents, formatCentsPlain, formatRelative } from "@/lib/format";
-import type { WatchRowData } from "@/lib/watchlist/types";
+import type { LinkedSource, WatchRowData } from "@/lib/watchlist/types";
 import { TONE_TEXT, verdictFor } from "@/lib/watchlist/verdict";
 
 type WatchRowProps = {
   row: WatchRowData;
   /** 90-day series for this row's current variant. */
   points: SparkPoint[];
+  /** Every site linked to this watch, from `my_watch_sources`. */
+  sources: LinkedSource[];
   nowMs: number;
   /** Last scraper error for a failing source, when known. */
   lastError?: string | null;
@@ -30,6 +32,7 @@ function describeVariant(key: string | null): string | null {
 export function WatchRow({
   row,
   points,
+  sources,
   nowMs,
   lastError = null,
 }: WatchRowProps) {
@@ -39,6 +42,7 @@ export function WatchRow({
   const verdict = verdictFor({
     currentCents: row.current_cents,
     lowCents: row.low_90_cents,
+    highCents: row.high_90_cents,
     pctRank: row.pct_rank_90,
   });
   const mutedUntilMs = row.muted_until ? Date.parse(row.muted_until) : NaN;
@@ -113,23 +117,8 @@ export function WatchRow({
           <div className="mt-2">
             <Sparkline points={points} nowMs={nowMs} />
           </div>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            {row.canonical_url && (
-              <a
-                href={row.canonical_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-ink2 underline underline-offset-4 hover:text-ink"
-              >
-                View at {row.retailer}
-              </a>
-            )}
-            <Link
-              href={`/add?watch=${row.watch_id}`}
-              className="text-ink2 underline underline-offset-4 hover:text-ink"
-            >
-              Link another retailer
-            </Link>
+          <div className="mt-6">
+            <LinkedSites watchId={row.watch_id} sources={sources} />
           </div>
         </div>
 
