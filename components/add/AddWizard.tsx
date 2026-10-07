@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { detectAction } from "@/app/(app)/add/actions";
 import type { Detected } from "@/lib/add/types";
+import { ConfirmStep, type ConfirmChoice } from "./ConfirmStep";
 import { PasteStep } from "./PasteStep";
 
 /** Set when the page was opened with ?watch=<id>: add a source to that watch. */
@@ -14,7 +15,8 @@ export interface LinkTarget {
 
 type Step =
   | { name: "paste" }
-  | { name: "confirm"; detected: Detected };
+  | { name: "confirm"; detected: Detected }
+  | { name: "alert"; detected: Detected; choice: ConfirmChoice };
 
 export function AddWizard({ link }: { link: LinkTarget | null }) {
   const [step, setStep] = useState<Step>({ name: "paste" });
@@ -68,8 +70,22 @@ export function AddWizard({ link }: { link: LinkTarget | null }) {
           />
         )}
         {step.name === "confirm" && (
-          <p className="text-ink2">Found {step.detected.variants.length} variants.</p>
+          <ConfirmStep
+            detected={step.detected}
+            pickVariants={!link}
+            askNickname={!link}
+            onConfirm={(choice) =>
+              setStep({ name: "alert", detected: step.detected, choice })
+            }
+            onReject={() => {
+              setError(null);
+              setStep({ name: "paste" });
+            }}
+            pending={pending}
+            error={error}
+          />
         )}
+        {step.name === "alert" && <p className="text-ink2">Set an alert.</p>}
       </div>
 
       <p className="mt-6 text-sm">
