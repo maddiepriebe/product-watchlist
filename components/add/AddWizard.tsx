@@ -5,7 +5,9 @@ import { useState, useTransition } from "react";
 import { detectAction } from "@/app/(app)/add/actions";
 import type { Detected } from "@/lib/add/types";
 import { ConfirmStep, type ConfirmChoice } from "./ConfirmStep";
+import { ManualStep } from "./ManualStep";
 import { PasteStep } from "./PasteStep";
+import { UnsupportedStep } from "./UnsupportedStep";
 
 /** Set when the page was opened with ?watch=<id>: add a source to that watch. */
 export interface LinkTarget {
@@ -15,25 +17,54 @@ export interface LinkTarget {
 
 type Step =
   | { name: "paste" }
+  | { name: "manual"; message: string }
   | { name: "confirm"; detected: Detected }
-  | { name: "alert"; detected: Detected; choice: ConfirmChoice };
+  | {
+      name: "unsupported";
+      message: string;
+      retailer: string;
+      title: string | null;
+    }
+  | { name: "alert"; detected: Detected | null; choice: ConfirmChoice | null };
 
 export function AddWizard({ link }: { link: LinkTarget | null }) {
-  const [step, setStep] = useState<Step>({ name: "paste" });
+  const [step, setStepState] = useState<Step>({ name: "paste" });
   const [url, setUrl] = useState("");
+  /** The price text that produced the current result; null for a plain detection. */
+  const [priceText, setPriceText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function detect() {
+  function go(next: Step) {
+    setError(null);
+    setStepState(next);
+  }
+
+  /** Run detection, from the paste step or the manual fallback. */
+  function detect(text: string | null) {
     setError(null);
     startTransition(async () => {
-      const result = await detectAction({ url });
+      const result = await detectAction({
+        url,
+        ...(text !== null && { priceText: text }),
+      });
       switch (result.kind) {
         case "detected":
-          setStep({ name: "confirm", detected: result.detected });
+          setPriceText(text);
+          go({ name: "confirm", detected: result.detected });
           break;
         case "manual":
+          go({ name: "manual", message: result.message });
+          break;
         case "unsupported":
+          setPriceText(text);
+          go({
+            name: "unsupported",
+            message: result.message,
+            retailer: result.retailer,
+            title: result.title,
+          });
+          break;
         case "retry":
           setError(result.message);
           break;
@@ -64,7 +95,7 @@ export function AddWizard({ link }: { link: LinkTarget | null }) {
           <PasteStep
             url={url}
             onUrlChange={setUrl}
-            onSubmit={detect}
+            onSubmit={() => detect(null)}
             pending={pending}
             error={error}
           />
@@ -75,12 +106,35 @@ export function AddWizard({ link }: { link: LinkTarget | null }) {
             pickVariants={!link}
             askNickname={!link}
             onConfirm={(choice) =>
-              setStep({ name: "alert", detected: step.detected, choice })
+              go({ name: "alert", detected: step.detected, choice })
             }
-            onReject={() => {
-              setError(null);
-              setStep({ name: "paste" });
-            }}
+            onReject={() =>
+              go({
+                name: "manual",
+                message:
+                  "Okay. Tell us the price you see and we'll look for it on the page.",
+              })
+            }
+            pending={pending}
+            error={error}
+          />
+        )}
+        {step.name === "manual" && (
+          <ManualStep
+            message={step.message}
+            onSubmit={(text) => detect(text)}
+            onCancel={() => go({ name: "paste" })}
+            pending={pending}
+            error={error}
+          />
+        )}
+        {step.name === "unsupported" && (
+          <UnsupportedStep
+            message={step.message}
+            retailer={step.retailer}
+            title={step.title}
+            onKeep={() => go({ name: "alert", detected: null, choice: null })}
+            onCancel={() => go({ name: "paste" })}
             pending={pending}
             error={error}
           />
