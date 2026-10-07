@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { muteWatch, unmuteWatch } from "@/app/(app)/watchlist/actions";
+import {
+  archiveWatch,
+  muteWatch,
+  unmuteWatch,
+} from "@/app/(app)/watchlist/actions";
 import { PriceLadder } from "@/components/PriceLadder";
 import { Sparkline, type SparkPoint } from "@/components/Sparkline";
 import { AlertRuleForm } from "@/components/watchlist/AlertRuleForm";
@@ -145,6 +149,15 @@ export function WatchRow({ row, points, nowMs }: WatchRowProps) {
                 <span className="font-mono">{row.muted_until.slice(0, 10)}</span>
               </span>
             )}
+          </form>
+          <form action={archiveWatch} className="mt-3 text-sm">
+            <input type="hidden" name="watch_id" value={row.watch_id} />
+            <button
+              type="submit"
+              className="text-ink2 underline underline-offset-4 hover:text-ink"
+            >
+              Archive
+            </button>
           </form>
         </div>
       </div>

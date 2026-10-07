@@ -104,6 +104,29 @@ export async function muteWatch(formData: FormData): Promise<void> {
   revalidatePath("/watchlist");
 }
 
+export async function archiveWatch(formData: FormData): Promise<void> {
+  const id = watchId(formData);
+  if (!id) failTo("Couldn't find that watch. Refresh the page.");
+
+  const failure = await updateWatch(id, {
+    archived_at: new Date().toISOString(),
+  });
+  if (failure) failTo(failure);
+  revalidatePath("/watchlist");
+  // The page shows an "Archived. Undo" banner keyed by this id.
+  redirect(`/watchlist?archived=${id}`);
+}
+
+export async function unarchiveWatch(formData: FormData): Promise<void> {
+  const id = watchId(formData);
+  if (!id) failTo("Couldn't find that watch. Refresh the page.");
+
+  const failure = await updateWatch(id, { archived_at: null });
+  if (failure) failTo(failure);
+  revalidatePath("/watchlist");
+  redirect("/watchlist");
+}
+
 export async function unmuteWatch(formData: FormData): Promise<void> {
   const id = watchId(formData);
   if (!id) failTo("Couldn't find that watch. Refresh the page.");
