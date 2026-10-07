@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { detectAction } from "@/app/(app)/add/actions";
-import type { Detected } from "@/lib/add/types";
+import type { Detected, DetectedVariant } from "@/lib/add/types";
+import { AlertStep } from "./AlertStep";
 import { ConfirmStep, type ConfirmChoice } from "./ConfirmStep";
 import { ManualStep } from "./ManualStep";
 import { PasteStep } from "./PasteStep";
@@ -27,7 +28,37 @@ type Step =
     }
   | { name: "alert"; detected: Detected | null; choice: ConfirmChoice | null };
 
-export function AddWizard({ link }: { link: LinkTarget | null }) {
+/** The variants this watch will follow, for the alert step's price hint. */
+function watchedVariants(
+  step: Extract<Step, { name: "alert" }>,
+): DetectedVariant[] | null {
+  if (!step.detected) return null;
+  const keys = step.choice?.watchedVariantKeys;
+  return keys
+    ? step.detected.variants.filter((v) => keys.includes(v.variant_key))
+    : step.detected.variants;
+}
+
+function stepLabel(step: Step, total: number): string {
+  switch (step.name) {
+    case "paste":
+      return `Step 1 of ${total} · Paste a link`;
+    case "manual":
+    case "confirm":
+    case "unsupported":
+      return `Step 2 of ${total} · Confirm the price`;
+    case "alert":
+      return `Step 3 of ${total} · Set an alert`;
+  }
+}
+
+export function AddWizard({
+  link,
+  email,
+}: {
+  link: LinkTarget | null;
+  email: string;
+}) {
   const [step, setStepState] = useState<Step>({ name: "paste" });
   const [url, setUrl] = useState("");
   /** The price text that produced the current result; null for a plain detection. */
@@ -74,6 +105,9 @@ export function AddWizard({ link }: { link: LinkTarget | null }) {
 
   return (
     <div className="mx-auto w-full max-w-xl">
+      <p className="mb-2 font-mono text-xs uppercase tracking-wide text-ink3">
+        {stepLabel(step, link ? 2 : 3)}
+      </p>
       <h1 className="text-xl font-medium text-ink">
         {link ? (
           <>
@@ -139,7 +173,15 @@ export function AddWizard({ link }: { link: LinkTarget | null }) {
             error={error}
           />
         )}
-        {step.name === "alert" && <p className="text-ink2">Set an alert.</p>}
+        {step.name === "alert" && (
+          <AlertStep
+            email={email}
+            watched={watchedVariants(step)}
+            onSubmit={() => undefined}
+            pending={pending}
+            error={error}
+          />
+        )}
       </div>
 
       <p className="mt-6 text-sm">

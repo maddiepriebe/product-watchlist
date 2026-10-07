@@ -45,7 +45,10 @@ export async function detectAction(input: {
 
   const url = cleanUrl(input.url);
   if (!url) {
-    return { kind: "retry", message: "Paste the full link to the product page." };
+    return {
+      kind: "retry",
+      message: "Paste the full link to the product page.",
+    };
   }
   const priceText = cleanPriceText(input.priceText);
   if (priceText === null) {
