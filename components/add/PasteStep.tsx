@@ -8,7 +8,10 @@ export function PasteStep({
   onSubmit,
   pending,
   error,
+  showMultiStoreHint,
 }: {
+  /** Normal mode only: hint that more stores can be added afterwards. */
+  showMultiStoreHint: boolean;
   url: string;
   onUrlChange: (url: string) => void;
   onSubmit: () => void;
@@ -40,6 +43,12 @@ export function PasteStep({
         aria-invalid={error ? true : undefined}
         className={`${inputClass} font-mono text-sm`}
       />
+      {showMultiStoreHint && (
+        <p className="text-sm text-ink3">
+          Found it at more than one store? Add one link now and the others
+          after.
+        </p>
+      )}
       {error && (
         <p id="product-url-error" role="alert" className="text-high">
           {error}

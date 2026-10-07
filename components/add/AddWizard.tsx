@@ -173,6 +173,7 @@ export function AddWizard({
           <PasteStep
             url={url}
             onUrlChange={setUrl}
+            showMultiStoreHint={!link}
             onSubmit={() => detect(null)}
             pending={pending}
             error={error}
