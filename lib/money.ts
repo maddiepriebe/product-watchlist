@@ -24,3 +24,17 @@ export function parseMoneyToCents(input: string): number | null {
   const total = dollars * 100 + cents;
   return Number.isSafeInteger(total) && total <= MAX_CENTS ? total : null;
 }
+
+/**
+ * "10", "12.5", "7.25%" → percent with at most 2 decimals, 0 < x ≤ 99.99
+ * (alert_pct_drop is numeric(5,2)). Range-checked in integer hundredths.
+ */
+export function parsePercent(input: string): number | null {
+  const s = input.trim().replace(/\s*%$/, "");
+  const match = /^(\d{1,2})(?:\.(\d{1,2}))?$/.exec(s);
+  if (!match) return null;
+  const [, whole, frac = ""] = match;
+  const hundredths = Number(whole) * 100 + Number(frac.padEnd(2, "0"));
+  if (hundredths <= 0 || hundredths > 9999) return null;
+  return Number(frac === "" ? whole : `${whole}.${frac}`);
+}

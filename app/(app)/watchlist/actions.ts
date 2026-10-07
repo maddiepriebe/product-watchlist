@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { parseMoneyToCents, parsePct } from "@/lib/watchlist/parse";
+import { parseMoneyToCents, parsePercent } from "@/lib/money";
 import type { RuleFormState, WatchUpdate } from "@/lib/watchlist/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -72,7 +72,7 @@ export async function updateAlertRules(
 
   let pct: number | null = null;
   if (pctRaw !== "") {
-    pct = parsePct(pctRaw);
+    pct = parsePercent(pctRaw);
     if (pct === null) {
       fieldErrors.pct = "Enter a percentage above 0 and up to 99.99.";
     }

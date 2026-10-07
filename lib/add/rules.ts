@@ -1,4 +1,4 @@
-import { parseMoneyToCents } from "@/lib/money";
+import { parseMoneyToCents, parsePercent } from "@/lib/money";
 
 /** What the alert form holds: raw strings plus the two checkboxes. */
 export interface AlertRulesInput {
@@ -25,14 +25,6 @@ export type AlertRulesResult =
  * two decimals (the column is numeric(5,2)). Percent is not money, so a number
  * is the right type; it is only ever built from a validated digit string.
  */
-export function parsePercent(input: string): number | null {
-  const s = input.trim().replace(/\s*%$/, "");
-  const match = /^(\d{1,2})(?:\.(\d{1,2}))?$/.exec(s);
-  if (!match) return null;
-  const value = Number(s);
-  return value > 0 && value <= 99.99 ? value : null;
-}
-
 /** Shared by the form (inline errors) and the save action (re-validation). */
 export function parseAlertRules(input: AlertRulesInput): AlertRulesResult {
   const errors: { below?: string; pctDrop?: string } = {};
