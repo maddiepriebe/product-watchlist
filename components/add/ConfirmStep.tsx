@@ -91,6 +91,8 @@ export function ConfirmStep({
           <img
             src={detected.image_url}
             alt=""
+            referrerPolicy="no-referrer"
+            loading="lazy"
             className="h-20 w-20 shrink-0 rounded-[2px] border border-rule object-cover"
           />
         )}
