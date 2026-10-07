@@ -46,3 +46,6 @@ next-env.d.ts
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# agent worktrees
+.claude/worktrees/
