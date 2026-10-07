@@ -44,7 +44,7 @@ def test_money(cents: int, currency: str, expected: str) -> None:
     assert money(cents, currency) == expected
 
 
-async def test_dispatch_writes_notification_and_sends_email(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_dispatch_sends_one_email_with_a_row_per_reason(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict = {}
 
     def fake_evaluate(watch: Watch, latest: PricePoint, history: list[PricePoint]) -> list:
@@ -59,7 +59,8 @@ async def test_dispatch_writes_notification_and_sends_email(monkeypatch: pytest.
     n = await dispatch_alerts(db, sender, app_url="https://app.test", source=make_source(),
                               variant_id=vid, variant_key="M|black", latest=latest)
 
-    assert n == 2
+    assert n == 1   # one email, however many reasons fired
+    assert len(sender.sent) == 1
     # evaluate got the call conventions in alerts.py
     assert seen["latest"] == latest
     assert [p.price_cents for p in seen["history"]] == [30000, 29000]   # oldest first, excludes latest
@@ -70,12 +71,54 @@ async def test_dispatch_writes_notification_and_sends_email(monkeypatch: pytest.
     assert notes[0].variant_id == vid and notes[0].source_id == "src-1"
     to, email, key = sender.sent[0]
     assert to == "maddie@test.dev"
-    assert key == f"notification-{notes[0].id}"
+    assert key == f"notifications-{notes[0].id}-{notes[1].id}"
     assert email.subject == "Rustic Flowers Maxi Dress dropped to $248.00"
-    assert "Below your $250.00 alert." in email.text
+    assert email.text.startswith(
+        "Rustic Flowers Maxi Dress dropped to $248.00 at farmrio.com.\n"
+        "Below your $250.00 alert.\nLowest price in 90 days.\n\n")
+    assert "Lowest price in 90 days." in email.html
     assert "https://farmrio.com/products/rustic" in email.text
     assert "https://app.test/watchlist" in email.text
     assert 'href="https://app.test/watchlist"' in email.html
+
+
+async def test_restock_alongside_price_reasons_leads_with_the_price(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alerts, "evaluate", lambda w, l, h: ["back_in_stock", "below_threshold"])
+    db, vid = setup_db([make_watch()])
+    sender = FakeSender()
+    n = await dispatch_alerts(db, sender, app_url="https://app.test", source=make_source(),
+                              variant_id=vid, variant_key="m|black", latest=db.state.points[vid][-1])
+    assert n == 1
+    [(_, email, key)] = sender.sent
+    assert email.subject == "Rustic Flowers Maxi Dress dropped to $248.00"
+    assert email.text.startswith(
+        "Rustic Flowers Maxi Dress dropped to $248.00 at farmrio.com.\n"
+        "Below your $250.00 alert.\nBack in stock in m, black.\n")
+    assert [x.reason for x in db.state.notifications] == ["back_in_stock", "below_threshold"]
+    assert key == "notifications-1-2"
+
+
+async def test_restock_only_email(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alerts, "evaluate", lambda w, l, h: ["back_in_stock"])
+    db, vid = setup_db([make_watch()])
+    sender = FakeSender()
+    await dispatch_alerts(db, sender, app_url="https://app.test", source=make_source(),
+                          variant_id=vid, variant_key="M", latest=db.state.points[vid][-1])
+    [(_, email, key)] = sender.sent
+    assert email.subject == "Rustic Flowers Maxi Dress is back in stock in M"
+    assert key == "notifications-1"
+
+
+async def test_each_watch_gets_its_own_email(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alerts, "evaluate", lambda w, l, h: ["below_threshold", "new_low"])
+    db, vid = setup_db([make_watch(id="w-1"), make_watch(id="w-2", user_id="u-2")])
+    db.state.emails["u-2"] = "other@test.dev"
+    sender = FakeSender()
+    n = await dispatch_alerts(db, sender, app_url="https://app.test", source=make_source(),
+                              variant_id=vid, variant_key="M|black", latest=db.state.points[vid][-1])
+    assert n == 2
+    assert [to for to, _, _ in sender.sent] == ["maddie@test.dev", "other@test.dev"]
+    assert [k for _, _, k in sender.sent] == ["notifications-1-2", "notifications-3-4"]
 
 
 async def test_recent_alerts_passed_newest_first(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,18 +132,20 @@ async def test_recent_alerts_passed_newest_first(monkeypatch: pytest.MonkeyPatch
     ]
     await dispatch_alerts(db, FakeSender(), app_url="https://app.test", source=make_source(),
                           variant_id=vid, variant_key="M|black", latest=db.state.points[vid][-1])
-    assert [a.reason for a in calls[0].recent_alerts] == ["pct_drop", "new_low"]
+    # Undelivered rows count too: a failed send still holds back the next alert.
+    assert [a.reason for a in calls[0].recent_alerts] == ["below_threshold", "pct_drop", "new_low"]
 
 
-async def test_email_failure_is_recorded_not_raised(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(alerts, "evaluate", lambda w, l, h: ["new_low"])
+async def test_email_failure_is_recorded_on_every_row_not_raised(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alerts, "evaluate", lambda w, l, h: ["new_low", "pct_drop"])
     db, vid = setup_db([make_watch()])
     n = await dispatch_alerts(db, FakeSender(fail=True), app_url="https://app.test", source=make_source(),
                               variant_id=vid, variant_key="M|black", latest=db.state.points[vid][-1])
     assert n == 0
-    [note] = db.state.notifications
-    assert note.delivered is False
-    assert "resend is down" in (note.error or "")
+    assert len(db.state.notifications) == 2
+    for note in db.state.notifications:
+        assert note.delivered is False
+        assert "resend is down" in (note.error or "")
 
 
 async def test_not_implemented_is_skipped_and_logged_once(
@@ -167,14 +212,14 @@ def test_reason_lines() -> None:
 
 
 def test_back_in_stock_copy_and_nickname() -> None:
-    e = compose("back_in_stock", watch=make_watch(nickname="Green dress"), source=make_source(),
+    e = compose(["back_in_stock"], watch=make_watch(nickname="Green dress"), source=make_source(),
                 variant_key="M", latest=PricePoint(NOW, 29800, True), history=[], app_url="https://app.test")
     assert e.subject == "Green dress is back in stock in M"
     assert e.text.startswith("Green dress is back in stock at farmrio.com for $298.00.\nBack in stock in M.")
 
 
 def test_html_is_escaped() -> None:
-    e = compose("new_low", watch=make_watch(nickname="<b>Dress</b>"), source=make_source(),
+    e = compose(["new_low"], watch=make_watch(nickname="<b>Dress</b>"), source=make_source(),
                 variant_key="", latest=PricePoint(NOW, 100, True), history=[], app_url="https://app.test")
     assert "<b>Dress</b>" not in e.html and "&lt;b&gt;" in e.html
 
@@ -209,9 +254,9 @@ def test_subject_says_dropped_only_after_a_drop() -> None:
     latest = PricePoint(t0 + timedelta(hours=6), 24800, True)
     kw = dict(watch=make_watch(), source=make_source(), variant_key="", app_url="https://app.test")
 
-    first = compose("below_threshold", latest=latest, history=[], **kw)
+    first = compose(["below_threshold"], latest=latest, history=[], **kw)
     assert first.subject == "Rustic Flowers Maxi Dress is $248.00"
 
-    after_drop = compose("below_threshold", latest=latest,
+    after_drop = compose(["below_threshold"], latest=latest,
                          history=[PricePoint(t0, 30000, True)], **kw)
     assert after_drop.subject == "Rustic Flowers Maxi Dress dropped to $248.00"

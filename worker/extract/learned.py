@@ -3,6 +3,11 @@
 The path either resolves to an exact number or the check fails. There is no
 fallback search: if the retailer reshapes its JSON, the source starts
 failing and the user re-teaches it, rather than us guessing a new path.
+
+A config taught from a URL that pinned one variant also carries that
+variant's `variant_key` (plus `size` and `color`), and resolve() reports it.
+Configs without one, which is every config taught before pinning existed,
+report no key (the scheduler stores that as "").
 """
 
 import re
@@ -10,6 +15,7 @@ from typing import Any, Mapping
 
 from extract.base import Extracted
 from extract.findpath import cents_from, load_blobs
+from extract.variantkey import is_well_formed
 
 # schema.org availability values that mean "you can't buy it now".
 # Anything else (InStock, LimitedAvailability, OnlineOnly, …) counts as in stock.
@@ -33,6 +39,12 @@ def _valid(config: Mapping[str, Any]) -> bool:
         block = config.get("block")
         return isinstance(block, int) and not isinstance(block, bool) and block >= 0
     return True
+
+
+def config_variant_key(config: Mapping[str, Any]) -> str | None:
+    """The pinned variant's key, or None for configs that don't carry a usable one."""
+    key = config.get("variant_key")
+    return key if isinstance(key, str) and key and is_well_formed(key) else None
 
 
 def _follow(data: Any, path: list[str | int]) -> tuple[Any, Any] | None:
@@ -72,7 +84,7 @@ def _currency(parent: Any) -> str:
 
 
 def resolve(html: str, config: Mapping[str, Any]) -> list[Extracted]:
-    """One Extracted (variant_key None) if the path still holds an exact price, else []."""
+    """One Extracted (variant_key from the config, else None) if the path still holds an exact price, else []."""
     if not _valid(config):
         return []
     blob_kind = config["blob"]
@@ -101,7 +113,7 @@ def resolve(html: str, config: Mapping[str, Any]) -> list[Extracted]:
             price_cents=cents,
             currency=_currency(parent),
             in_stock=in_stock,
-            variant_key=None,
+            variant_key=config_variant_key(config),
             strategy=f"learned:{blob_kind}",
         )
     ]

@@ -115,7 +115,7 @@ class FakeQueries:
                 if w.watched_variant_keys is None or variant_key in w.watched_variant_keys]
 
     async def recent_alerts(self, watch_id: str, since: datetime) -> tuple[SentAlert, ...]:
-        rows = [n for n in self.s.notifications if n.watch_id == watch_id and n.delivered and n.sent_at >= since]
+        rows = [n for n in self.s.notifications if n.watch_id == watch_id and n.sent_at >= since]
         rows.sort(key=lambda n: n.sent_at, reverse=True)
         return tuple(SentAlert(n.sent_at, n.reason, n.price_cents) for n in rows)  # type: ignore[arg-type]
 

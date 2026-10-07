@@ -21,7 +21,8 @@ from extract import base as extract_base
 from extract import learned
 from extract import normalize
 from extract.base import Extracted
-from extract.findpath import find_paths, parse_price_text
+from extract.findpath import Candidate, find_paths, parse_price_text
+from extract.urlvariant import PinnedVariant, find_pinned_variant
 from extract.meta import page_meta
 from fetcher import Fetcher, FetchResult
 from logs import setup_logging, warn_once
@@ -68,6 +69,9 @@ class ExtractResponse(BaseModel):
     message: str
     source: SourceOut | None
     variants: list[VariantOut] = []
+    # Normalized key of the variant the pasted URL points at; null unless it
+    # pins exactly one variant that `variants` can be watched by.
+    url_variant_key: str | None = None
 
 
 # -------------------------------------------------------------- copy
@@ -182,7 +186,7 @@ async def run_extract(req: ExtractRequest, fetcher: Fetcher) -> ExtractResponse:
     source = source.model_copy(update={"title": meta.title, "image_url": meta.image_url})
 
     if target is not None:
-        return await _teach(html, target, source)
+        return await _teach(html, target, source, url)
 
     try:
         found = await asyncio.to_thread(extract_base.extract, html, canonical_url)
@@ -198,20 +202,39 @@ async def run_extract(req: ExtractRequest, fetcher: Fetcher) -> ExtractResponse:
         return ExtractResponse(status="no_price", message=MSG_NO_PRICE, source=source)
     variants = [variant_out(e) for e in valid]
     source = source.model_copy(update={"extractor": extractor_kind(valid[0].strategy)})
-    return ExtractResponse(status="ok", message=msg_ok(variants, False), source=source, variants=variants)
+    # Only report the URL's variant if the extractor's own keys include it, so
+    # watching it can actually fire.
+    pinned = await asyncio.to_thread(find_pinned_variant, html, url)
+    url_key = pinned.key if pinned and pinned.key in {v.variant_key for v in variants} else None
+    return ExtractResponse(status="ok", message=msg_ok(variants, False), source=source,
+                           variants=variants, url_variant_key=url_key)
 
 
-async def _teach(html: str, target: int, source: SourceOut) -> ExtractResponse:
-    """Find the user's price in the page's JSON and confirm the learned path reads it back."""
-    candidates = await asyncio.to_thread(find_paths, html, target)
+def _pinned_config(c: Candidate, pinned: PinnedVariant | None) -> dict[str, Any]:
+    """The learned config for `c`, with the variant stored if `c` lies inside the pinned offer."""
+    cfg = c.config()
+    if pinned and pinned.key and any(c.within(loc) for loc in pinned.locations):
+        cfg.update(variant_key=pinned.key, size=pinned.size, color=pinned.color)
+    return cfg
+
+
+async def _teach(html: str, target: int, source: SourceOut, url: str) -> ExtractResponse:
+    """Find the user's price in the page's JSON and confirm the learned path reads it back.
+
+    If the pasted URL points at one offer (`?variant=…`), paths inside that
+    offer win, and the config remembers the offer's variant key.
+    """
+    pinned = await asyncio.to_thread(find_pinned_variant, html, url)
+    candidates = await asyncio.to_thread(
+        find_paths, html, target, pinned.locations if pinned else ())
     for c in candidates:
-        cfg = c.config()
+        cfg = _pinned_config(c, pinned)
         got = learned.resolve(html, cfg)
         if got and got[0].price_cents == target:
             variants = [variant_out(got[0])]
             source = source.model_copy(update={"extractor": c.blob, "extractor_config": cfg})
-            return ExtractResponse(status="ok", message=msg_ok(variants, True),
-                                   source=source, variants=variants)
+            return ExtractResponse(status="ok", message=msg_ok(variants, True), source=source,
+                                   variants=variants, url_variant_key=cfg.get("variant_key"))
     return ExtractResponse(status="price_text_not_found", message=msg_not_found(target), source=source)
 
 

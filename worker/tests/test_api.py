@@ -100,7 +100,8 @@ def test_empty_secret_never_authorizes(fetcher: FakeFetcher) -> None:
 @pytest.mark.parametrize("url", ["farmrio.com/products/x", "ftp://farmrio.com/x", "javascript:alert(1)", "https://", ""])
 def test_invalid_url(client: TestClient, url: str) -> None:
     body = post(client, {"url": url})
-    assert body == {"status": "invalid_url", "message": body["message"], "source": None, "variants": []}
+    assert body == {"status": "invalid_url", "message": body["message"], "source": None, "variants": [],
+                    "url_variant_key": None}
     assert body["message"].startswith("That doesn't look like a product link.")
 
 
@@ -177,11 +178,80 @@ def test_price_text_teaches_a_path(client: TestClient, fetcher: FakeFetcher, nor
     src = body["source"]
     assert src["extractor"] == "jsonld"
     assert src["extractor_config"] == {
-        "learned": True, "blob": "jsonld", "block": 1, "path": ["offers", 0, "price"], "unit": "major"}
+        "learned": True, "blob": "jsonld", "block": 1, "path": ["offers", 2, "price"], "unit": "major"}   # the offer FARMRIO_URL's ?variant= names
     assert body["variants"] == [
         {"variant_key": "", "size": None, "color": None, "price_cents": 29800, "currency": "USD", "in_stock": True}]
+    assert body["url_variant_key"] is None   # Farm Rio's JSON-LD offers state no size or color
     # what the app stores is what the scheduler will read back
     assert resolve(fetcher.result.html, src["extractor_config"])[0].price_cents == 29800
+
+
+VUORI_FILE = "fixture-vuoriclothing-com-products-womens-daily-piped-bra-black-refS.html"
+VUORI_URL = "https://vuoriclothing.com/products/womens-daily-piped-bra-black"
+TWO_SIZES = """<script type="application/ld+json">{"@type": "Product", "offers": [
+  {"@type": "Offer", "sku": "A-S", "size": "S", "color": "Red", "price": 100},
+  {"@type": "Offer", "sku": "A-M", "size": "M", "color": "Red", "price": 200}]}</script>"""
+
+
+def test_price_text_pins_the_variant_the_url_names(client: TestClient, fetcher: FakeFetcher, normalized: None) -> None:
+    fetcher.result = FetchResult("ok", VUORI_URL, 200, fixture(VUORI_FILE))
+    body = post(client, {"url": f"{VUORI_URL}?objectId=41437918036071", "price_text": "$64"})
+    assert body["status"] == "ok"
+    cfg = body["source"]["extractor_config"]
+    assert cfg == {
+        "learned": True, "blob": "jsonld", "block": 0, "path": ["hasVariant", 1, "offers", "price"],
+        "unit": "major", "variant_key": "xs|black", "size": "XS", "color": "Black"}
+    assert body["url_variant_key"] == "xs|black"
+    assert body["variants"] == [
+        {"variant_key": "xs|black", "size": "xs", "color": "black", "price_cents": 6400,
+         "currency": "USD", "in_stock": True}]
+    assert resolve(fetcher.result.html, cfg)[0].variant_key == "xs|black"
+
+
+def test_price_text_without_a_pinned_variant_has_no_key(client: TestClient, fetcher: FakeFetcher, normalized: None) -> None:
+    fetcher.result = FetchResult("ok", VUORI_URL, 200, fixture(VUORI_FILE))
+    body = post(client, {"url": VUORI_URL, "price_text": "$64"})
+    assert body["status"] == "ok"
+    assert "variant_key" not in body["source"]["extractor_config"]
+    assert body["url_variant_key"] is None
+    assert body["variants"][0]["variant_key"] == ""
+
+
+def test_price_outside_the_pinned_offer_is_not_labelled(
+    client: TestClient, fetcher: FakeFetcher, normalized: None
+) -> None:
+    # The URL names size S ($100) but the user typed $200, which only size M has.
+    # We still learn the path they asked for, but must not call it size S.
+    fetcher.result = FetchResult("ok", "https://x.test/p", 200, TWO_SIZES)
+    body = post(client, {"url": "https://x.test/p?sku=A-S", "price_text": "200"})
+    assert body["status"] == "ok"
+    assert body["source"]["extractor_config"]["path"] == ["offers", 1, "price"]
+    assert "variant_key" not in body["source"]["extractor_config"]
+    assert body["url_variant_key"] is None
+    # ...whereas typing the pinned offer's own price labels it.
+    body = post(client, {"url": "https://x.test/p?sku=A-S", "price_text": "100"})
+    assert body["source"]["extractor_config"]["variant_key"] == "s|red"
+    assert body["url_variant_key"] == "s|red"
+
+
+def test_registry_extract_reports_the_url_variant(
+    client: TestClient, fetcher: FakeFetcher, normalized: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetcher.result = FetchResult("ok", VUORI_URL, 200, fixture(VUORI_FILE))
+    monkeypatch.setattr(extract_base, "extract", lambda html, url: [
+        Extracted(6400, "USD", False, "xxs|black", "jsonld"),
+        Extracted(6400, "USD", True, "xs|black", "jsonld"),
+    ])
+    assert post(client, {"url": f"{VUORI_URL}?objectId=41437918036071"})["url_variant_key"] == "xs|black"
+    assert post(client, {"url": VUORI_URL})["url_variant_key"] is None
+
+
+def test_registry_url_variant_must_be_one_the_extractor_returns(
+    client: TestClient, fetcher: FakeFetcher, normalized: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetcher.result = FetchResult("ok", VUORI_URL, 200, fixture(VUORI_FILE))
+    monkeypatch.setattr(extract_base, "extract", lambda html, url: [Extracted(6400, "USD", True, "l|black", "jsonld")])
+    assert post(client, {"url": f"{VUORI_URL}?objectId=41437918036071"})["url_variant_key"] is None
 
 
 def test_price_text_not_found(client: TestClient, fetcher: FakeFetcher, normalized: None) -> None:
