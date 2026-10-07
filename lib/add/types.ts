@@ -48,6 +48,8 @@ export interface SaveInput {
   watchedVariantKeys: string[] | null;
   nickname: string;
   alert: AlertRulesInput;
+  /** Link the source to this existing watch instead of creating one. */
+  watchId: string | null;
 }
 
 /** A successful save redirects, so the only result a client ever sees is a failure. */

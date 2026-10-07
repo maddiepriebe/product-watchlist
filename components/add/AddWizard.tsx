@@ -29,6 +29,14 @@ type Step =
     }
   | { name: "alert"; detected: Detected | null; choice: ConfirmChoice | null };
 
+/** Link mode never shows the alert step; the watch keeps its own rules. */
+const DEFAULT_ALERT: AlertRulesInput = {
+  below: "",
+  pctDrop: "",
+  onNewLow: true,
+  onRestock: true,
+};
+
 /** The variants this watch will follow, for the alert step's price hint. */
 function watchedVariants(
   step: Extract<Step, { name: "alert" }>,
@@ -73,10 +81,11 @@ export function AddWizard({
   }
 
   /** Save the watch. Success redirects; only a failure comes back here. */
-  function save(
-    from: Extract<Step, { name: "alert" }>,
-    alert: AlertRulesInput,
-  ) {
+  function save(from: {
+    detected: Detected | null;
+    choice: ConfirmChoice | null;
+    alert: AlertRulesInput;
+  }) {
     setError(null);
     startTransition(async () => {
       const failure = await saveAction({
@@ -85,7 +94,8 @@ export function AddWizard({
         mode: from.detected ? "confirmed" : "unsupported",
         watchedVariantKeys: from.choice?.watchedVariantKeys ?? null,
         nickname: from.choice?.nickname ?? "",
-        alert,
+        alert: from.alert,
+        watchId: link?.watchId ?? null,
       });
       setError(failure.message);
     });
@@ -160,7 +170,14 @@ export function AddWizard({
             pickVariants={!link}
             askNickname={!link}
             onConfirm={(choice) =>
-              go({ name: "alert", detected: step.detected, choice })
+              link
+                ? // Rules live on the watch, so linking skips the alert step.
+                  save({
+                    detected: step.detected,
+                    choice,
+                    alert: DEFAULT_ALERT,
+                  })
+                : go({ name: "alert", detected: step.detected, choice })
             }
             onReject={() =>
               go({
@@ -187,7 +204,11 @@ export function AddWizard({
             message={step.message}
             retailer={step.retailer}
             title={step.title}
-            onKeep={() => go({ name: "alert", detected: null, choice: null })}
+            onKeep={() =>
+              link
+                ? save({ detected: null, choice: null, alert: DEFAULT_ALERT })
+                : go({ name: "alert", detected: null, choice: null })
+            }
             onCancel={() => go({ name: "paste" })}
             pending={pending}
             error={error}
@@ -197,14 +218,26 @@ export function AddWizard({
           <AlertStep
             email={email}
             watched={watchedVariants(step)}
-            onSubmit={(alert) => save(step, alert)}
+            onSubmit={(alert) =>
+              save({ detected: step.detected, choice: step.choice, alert })
+            }
             pending={pending}
             error={error}
           />
         )}
       </div>
 
-      <p className="mt-6 text-sm">
+      <p className="mt-6 flex gap-5 text-sm">
+        {step.name !== "paste" && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => go({ name: "paste" })}
+            className="text-ink2 underline underline-offset-4 hover:text-ink disabled:opacity-60"
+          >
+            Start over
+          </button>
+        )}
         <Link
           href="/watchlist"
           className="text-ink2 underline underline-offset-4 hover:text-ink"

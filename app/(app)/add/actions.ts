@@ -9,7 +9,7 @@ import {
   linkSource,
   SAVE_FAILED_MESSAGE,
 } from "@/lib/add/save";
-import { isSaveInput } from "@/lib/add/save-input";
+import { isSaveInput, isUuid } from "@/lib/add/save-input";
 import type { DetectResult, SaveFailure, SaveInput } from "@/lib/add/types";
 import { createClient } from "@/lib/supabase/server";
 import { extractPrice } from "@/lib/worker";
@@ -93,6 +93,7 @@ export async function saveAction(raw: SaveInput): Promise<SaveFailure> {
   const url = cleanUrl(raw.url);
   const priceText = cleanPriceText(raw.priceText);
   if (!url || priceText === null) return fail(BAD_REQUEST);
+  if (raw.watchId !== null && !isUuid(raw.watchId)) return fail(BAD_REQUEST);
 
   const parsed = parseAlertRules(raw.alert);
   if (!parsed.ok) return fail("Check the alert amounts and try again.");
@@ -100,6 +101,26 @@ export async function saveAction(raw: SaveInput): Promise<SaveFailure> {
   const nickname = raw.nickname.trim();
   if (nickname.length > MAX_NICKNAME_LENGTH) {
     return fail("Use a nickname of 120 characters or fewer.");
+  }
+
+  if (raw.watchId !== null) {
+    // Select first so a guessed id gets a clear message, not an RLS error.
+    // RLS already limits this to the user's own watches; the explicit
+    // user_id filter keeps the intent visible.
+    const { data: watch, error } = await supabase
+      .from("watches")
+      .select("id")
+      .eq("id", raw.watchId)
+      .eq("user_id", user.id)
+      .is("archived_at", null)
+      .maybeSingle();
+    if (error) {
+      console.error("save: watch lookup failed", error);
+      return fail(SAVE_FAILED_MESSAGE);
+    }
+    if (!watch) {
+      return fail("We couldn't find that watch. It may have been archived.");
+    }
   }
 
   const outcome = await extractPrice({ url, priceText });
@@ -113,7 +134,8 @@ export async function saveAction(raw: SaveInput): Promise<SaveFailure> {
         `We couldn't read the price a second time. ${message} Start again to re-check it.`,
       );
     }
-    if (raw.watchedVariantKeys !== null) {
+    // Variant choice belongs to the watch, so link mode ignores it.
+    if (raw.watchedVariantKeys !== null && raw.watchId === null) {
       const known = new Set(variants.map((v) => v.variant_key));
       const chosen = new Set(raw.watchedVariantKeys);
       const valid =
@@ -151,6 +173,23 @@ export async function saveAction(raw: SaveInput): Promise<SaveFailure> {
     raw.mode === "unsupported",
   );
   if (!sourceResult.ok) return fail(sourceResult.message);
+
+  if (raw.watchId !== null) {
+    // Link mode: the watch already exists and keeps its own rules.
+    const linkedToExisting = await linkSource(
+      supabase,
+      raw.watchId,
+      sourceResult.id,
+    );
+    if (!linkedToExisting.ok) {
+      return fail(
+        linkedToExisting.duplicate
+          ? "Already linked. This watch already tracks that page."
+          : linkedToExisting.message,
+      );
+    }
+    redirect("/watchlist");
+  }
 
   const watch = await createWatch(supabase, user.id, {
     nickname: nickname === "" ? null : nickname,
