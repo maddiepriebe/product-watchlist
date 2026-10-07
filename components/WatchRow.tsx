@@ -9,6 +9,7 @@ import { StatusNotice } from "@/components/watchlist/StatusNotice";
 import { LinkedSites } from "@/components/watchlist/LinkedSites";
 import { AlertRuleForm } from "@/components/watchlist/AlertRuleForm";
 import { formatCents, formatCentsPlain, formatRelative } from "@/lib/format";
+import type { SortKey } from "@/lib/watchlist/sort";
 import type { LinkedSource, WatchRowData } from "@/lib/watchlist/types";
 import { TONE_TEXT, verdictFor } from "@/lib/watchlist/verdict";
 
@@ -21,6 +22,8 @@ type WatchRowProps = {
   nowMs: number;
   /** Last scraper error for a failing source, when known. */
   lastError?: string | null;
+  /** Current `?sort=`, carried through archive so the list keeps its order. */
+  sort: SortKey;
 };
 
 function describeVariant(key: string | null): string | null {
@@ -35,6 +38,7 @@ export function WatchRow({
   sources,
   nowMs,
   lastError = null,
+  sort,
 }: WatchRowProps) {
   const title = row.display_title ?? "Untitled product";
   const variant = describeVariant(row.current_variant_key);
@@ -159,6 +163,7 @@ export function WatchRow({
           </form>
           <form action={archiveWatch} className="mt-3 text-sm">
             <input type="hidden" name="watch_id" value={row.watch_id} />
+            <input type="hidden" name="sort" value={sort} />
             <button
               type="submit"
               className="text-ink2 underline underline-offset-4 hover:text-ink"

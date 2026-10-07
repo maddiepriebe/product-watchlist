@@ -53,6 +53,7 @@ export default async function WatchlistPage({
           style={{ borderRadius: "var(--radius)" }}
         >
           <input type="hidden" name="watch_id" value={archivedId} />
+          <input type="hidden" name="sort" value={sort} />
           <span>Archived.</span>
           <button
             type="submit"
@@ -90,6 +91,7 @@ export default async function WatchlistPage({
               sources={sources[row.watch_id] ?? []}
               nowMs={nowMs}
               lastError={failures[row.watch_id] ?? null}
+              sort={sort}
             />
           ))}
         </div>

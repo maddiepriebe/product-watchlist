@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { parseMoneyToCents, parsePercent } from "@/lib/money";
+import { DEFAULT_SORT, parseSort } from "@/lib/watchlist/sort";
 import type { RuleFormState, WatchUpdate } from "@/lib/watchlist/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -43,6 +44,15 @@ async function updateWatch(
   if (error) return "Couldn't save that change. Try again.";
   if (data.length === 0) return "That watch no longer exists. Refresh the page.";
   return null;
+}
+
+/** `/watchlist` with the list's sort kept, plus any extra params. */
+function watchlistUrl(formData: FormData, extra: Record<string, string> = {}): string {
+  const sort = parseSort(text(formData, "sort"));
+  const params = new URLSearchParams(extra);
+  if (sort !== DEFAULT_SORT) params.set("sort", sort);
+  const query = params.toString();
+  return query ? `/watchlist?${query}` : "/watchlist";
 }
 
 /** For one-click actions without a form state: surface failures in a banner. */
@@ -114,7 +124,7 @@ export async function archiveWatch(formData: FormData): Promise<void> {
   if (failure) failTo(failure);
   revalidatePath("/watchlist");
   // The page shows an "Archived. Undo" banner keyed by this id.
-  redirect(`/watchlist?archived=${id}`);
+  redirect(watchlistUrl(formData, { archived: id }));
 }
 
 export async function unarchiveWatch(formData: FormData): Promise<void> {
@@ -124,7 +134,7 @@ export async function unarchiveWatch(formData: FormData): Promise<void> {
   const failure = await updateWatch(id, { archived_at: null });
   if (failure) failTo(failure);
   revalidatePath("/watchlist");
-  redirect("/watchlist");
+  redirect(watchlistUrl(formData));
 }
 
 export async function unmuteWatch(formData: FormData): Promise<void> {
