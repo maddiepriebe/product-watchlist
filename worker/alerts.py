@@ -14,6 +14,7 @@ def evaluate(watch: Watch, latest: PricePoint, history: list[PricePoint]) -> lis
         covering at least the 90 days before `latest`; it excludes `latest`.
       - "now" is `latest.observed_at`.
       - `watch.recent_alerts` is newest first and includes every alert
-        this function caused that was then sent.
+        this function caused, whether or not the email was delivered
+        (a failed send still counts toward the gap and debounce).
     """
     raise NotImplementedError
