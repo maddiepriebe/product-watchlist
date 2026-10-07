@@ -12,7 +12,7 @@ import json
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterator, Literal
+from typing import Any, Iterator, Literal, Sequence
 
 from selectolax.lexbor import LexborHTMLParser
 
@@ -29,11 +29,28 @@ class Blob:
 
 
 @dataclass(frozen=True)
+class Location:
+    """A spot in a page's JSON: which blob, which JSON-LD block, which path."""
+
+    blob: BlobKind
+    block: int | None
+    path: tuple[PathKey, ...]
+
+
+@dataclass(frozen=True)
 class Candidate:
     blob: BlobKind
     block: int | None
     path: tuple[PathKey, ...]
     unit: Unit
+
+    def within(self, loc: Location) -> bool:
+        """True if this path lies at or below `loc` (same blob, same block)."""
+        return (
+            self.blob == loc.blob
+            and self.block == loc.block
+            and self.path[: len(loc.path)] == loc.path
+        )
 
     def config(self) -> dict[str, Any]:
         """The extractor_config shape in docs/worker-api.md."""
@@ -160,15 +177,18 @@ def is_price_key(key: str) -> bool:
 _REFERENCE_KEY = re.compile(r"compare|list|regular|original|was|msrp|high|max")
 
 
-def find_paths(html: str, target_cents: int) -> list[Candidate]:
+def find_paths(
+    html: str, target_cents: int, prefer: Sequence[Location] = ()
+) -> list[Candidate]:
     """Every JSON path whose value equals target_cents, best first.
 
-    Order: JSON-LD offers paths, then other JSON-LD, then __NEXT_DATA__;
+    Order: paths inside a `prefer` location (the offer the pasted URL points
+    at, see urlvariant.py) before everything else; then JSON-LD offers paths, then other JSON-LD, then __NEXT_DATA__;
     within that, selling-price keys before reference-price keys, shorter
     paths first, a key literally named "price" first, then document order.
     """
     target = Decimal(target_cents)
-    ranked: list[tuple[tuple[int, int, int, int, int, int], Candidate]] = []
+    ranked: list[tuple[tuple[int, int, int, int, int, int, int], Candidate]] = []
     order = 0
     for blob in load_blobs(html):
         for path, value in walk(blob.data):
@@ -187,6 +207,7 @@ def find_paths(html: str, target_cents: int) -> list[Candidate]:
             for unit in units:
                 c = Candidate(blob.kind, blob.block, path, unit)
                 rank = (
+                    0 if any(c.within(loc) for loc in prefer) else 1,
                     0 if blob.kind == "jsonld" and "offers" in path else 1,
                     0 if blob.kind == "jsonld" else 1,
                     1 if _REFERENCE_KEY.search(key) else 0,
