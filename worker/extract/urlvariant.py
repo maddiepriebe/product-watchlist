@@ -43,6 +43,7 @@ class PinnedVariant:
     locations: tuple[Location, ...]   # one per blob that matched (1 or 2)
     size: str | None
     color: str | None
+    ids: tuple[frozenset[str], ...] = ()   # each location's sku/gtin/productID values
 
     @property
     def key(self) -> str:
@@ -229,4 +230,5 @@ def find_pinned_variant(html: str, url: str) -> PinnedVariant | None:
     if len(keys) > 1:
         return None
     best = next((n for n in nodes if variant_key(n.size, n.color)), nodes[0])
-    return PinnedVariant(tuple(n.location for n in nodes), best.size, best.color)
+    return PinnedVariant(tuple(n.location for n in nodes), best.size, best.color,
+                         tuple(n.ids for n in nodes))

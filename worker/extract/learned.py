@@ -47,6 +47,26 @@ def config_variant_key(config: Mapping[str, Any]) -> str | None:
     return key if isinstance(key, str) and key and is_well_formed(key) else None
 
 
+_ID_FIELDS = ("sku", "productID", "gtin", "gtin8", "gtin12", "gtin13", "gtin14")
+
+
+def _ids_along(data: Any, path: list[str | int]) -> set[str]:
+    """sku/gtin/productID values of every object the path passes through."""
+    ids: set[str] = set()
+    node = data
+    for key in path:
+        if isinstance(node, dict):
+            ids |= {str(node[f]).strip() for f in _ID_FIELDS
+                    if isinstance(node.get(f), (str, int)) and not isinstance(node.get(f), bool)}
+        if isinstance(key, int) and isinstance(node, list) and 0 <= key < len(node):
+            node = node[key]
+        elif isinstance(key, str) and isinstance(node, dict) and key in node:
+            node = node[key]
+        else:
+            break
+    return ids
+
+
 def _follow(data: Any, path: list[str | int]) -> tuple[Any, Any] | None:
     """(parent, value) at path, or None if any step is missing."""
     parent = None
@@ -98,6 +118,11 @@ def resolve(html: str, config: Mapping[str, Any]) -> list[Extracted]:
     if found is None:
         return []
     parent, value = found
+    pin_ids = config.get("pin_ids")
+    if isinstance(pin_ids, list) and pin_ids:
+        # Taught on one specific offer: if it moved, fail rather than read a neighbour.
+        if not set(map(str, pin_ids)) & _ids_along(blob.data, config["path"]):
+            return []
     cents = cents_from(value, config["unit"])
     if cents is None or cents <= 0:
         return []

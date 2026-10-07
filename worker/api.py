@@ -213,8 +213,18 @@ async def run_extract(req: ExtractRequest, fetcher: Fetcher) -> ExtractResponse:
 def _pinned_config(c: Candidate, pinned: PinnedVariant | None) -> dict[str, Any]:
     """The learned config for `c`, with the variant stored if `c` lies inside the pinned offer."""
     cfg = c.config()
-    if pinned and pinned.key and any(c.within(loc) for loc in pinned.locations):
+    if not pinned:
+        return cfg
+    inside = [ids for loc, ids in zip(pinned.locations, pinned.ids) if c.within(loc)]
+    if not inside:
+        return cfg
+    if pinned.key:
         cfg.update(variant_key=pinned.key, size=pinned.size, color=pinned.color)
+    # Index paths like offers[2] would silently read another variant if the
+    # retailer reorders offers; remember the offer's ids so resolve() can refuse.
+    pin_ids = sorted(set().union(*inside))
+    if pin_ids:
+        cfg["pin_ids"] = pin_ids
     return cfg
 
 

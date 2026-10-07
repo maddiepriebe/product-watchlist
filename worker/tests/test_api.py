@@ -178,7 +178,8 @@ def test_price_text_teaches_a_path(client: TestClient, fetcher: FakeFetcher, nor
     src = body["source"]
     assert src["extractor"] == "jsonld"
     assert src["extractor_config"] == {
-        "learned": True, "blob": "jsonld", "block": 1, "path": ["offers", 2, "price"], "unit": "major"}   # the offer FARMRIO_URL's ?variant= names
+        "learned": True, "blob": "jsonld", "block": 1, "path": ["offers", 2, "price"], "unit": "major",
+        "pin_ids": ["196198770105"]}   # the offer FARMRIO_URL's ?variant= names, guarded by its sku
     assert body["variants"] == [
         {"variant_key": "", "size": None, "color": None, "price_cents": 29800, "currency": "USD", "in_stock": True}]
     assert body["url_variant_key"] is None   # Farm Rio's JSON-LD offers state no size or color
@@ -200,7 +201,8 @@ def test_price_text_pins_the_variant_the_url_names(client: TestClient, fetcher: 
     cfg = body["source"]["extractor_config"]
     assert cfg == {
         "learned": True, "blob": "jsonld", "block": 0, "path": ["hasVariant", 1, "offers", "price"],
-        "unit": "major", "variant_key": "xs|black", "size": "XS", "color": "Black"}
+        "unit": "major", "variant_key": "xs|black", "size": "XS", "color": "Black",
+        "pin_ids": ["VW1279BLKXSM"]}
     assert body["url_variant_key"] == "xs|black"
     assert body["variants"] == [
         {"variant_key": "xs|black", "size": "xs", "color": "black", "price_cents": 6400,

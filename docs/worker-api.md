@@ -108,8 +108,14 @@ path lies inside it the config also stores the variant:
 ```jsonc
   "variant_key": "xs|black",      // optional; the scheduler records prices under it
   "size": "XS",                   // optional, as the page states it
-  "color": "Black"                // optional
+  "color": "Black",               // optional
+  "pin_ids": ["VW1279BLKXSM"]     // optional; the offer's sku/gtin/productID
 ```
+
+`pin_ids` guards index paths like `offers[2]`: if no object along the path
+still carries one of those ids (the retailer reordered its offers), the read
+fails and the source starts failing, instead of reporting a neighbouring
+variant's price.
 
 Configs without `variant_key` (any taught before this existed, or from a URL
 that pins nothing) read as a single variant with key `""`. In that case

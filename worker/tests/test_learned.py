@@ -156,3 +156,18 @@ def test_config_variant_key_is_reported() -> None:
 def test_malformed_variant_key_in_config_is_ignored(bad: object) -> None:
     cfg = find_paths(fixture(FARMRIO), 29800)[0].config()
     assert resolve(fixture(FARMRIO), {**cfg, "variant_key": bad})[0].variant_key is None
+
+
+def test_pinned_offer_reordered_fails_instead_of_reading_a_neighbour() -> None:
+    import json as _json
+    def page(offers: list[dict]) -> str:
+        blob = {"@type": "Product", "offers": offers}
+        return f'<script type="application/ld+json">{_json.dumps(blob)}</script>'
+    a = {"sku": "A", "price": "10.00"}
+    b = {"sku": "B", "price": "12.00"}
+    cfg = {"learned": True, "blob": "jsonld", "block": 0, "path": ["offers", 1, "price"],
+           "unit": "major", "pin_ids": ["B"]}
+    assert [e.price_cents for e in resolve(page([a, b]), cfg)] == [1200]
+    assert resolve(page([b, a]), cfg) == []      # B moved to index 0
+    no_pin = {k: v for k, v in cfg.items() if k != "pin_ids"}
+    assert [e.price_cents for e in resolve(page([b, a]), no_pin)] == [1000]   # old configs unchanged
